@@ -1,0 +1,6 @@
+@import "tailwindcss";
+/* You can add global styles below */
+body {
+	margin: 0;
+	font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}

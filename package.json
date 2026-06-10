@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "db:diag": "node backend/scripts/db-diagnostics.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "mongoose": "^9.6.3"
+  }
+}
