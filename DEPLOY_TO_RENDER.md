@@ -18,9 +18,15 @@ Follow these steps to deploy the project to Render using the provided `render.ya
    - `deluxe-hotel-frontend` (type: static)
      - Build Command: `cd frontend && npm install && npm run build`
      - Publish Path: `frontend/dist`
+     - Environment variables (set in Render Static Site settings):
+       - `VITE_API_URL` — URL of the backend API (e.g. `https://deluxe-hotel.onrender.com`)
 
 4. After services are created, Render will build and deploy. Check service logs if anything fails.
 
 Notes:
 - The backend expects `process.env.PORT` (Render sets this automatically).
 - If you prefer a single Docker deployment or need custom domains, use Render's advanced settings.
+
+Frontend notes:
+- The frontend reads `VITE_API_URL` at build time. If you don't set it, the app will fall back to `https://deluxe-hotel.onrender.com`.
+- A sample file is included at `frontend/.env.example`.
