@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import { backendUrl } from '../App'
@@ -81,6 +81,23 @@ const HotelDetails = () => {
     return () => { if (availabilityTimer.current) clearTimeout(availabilityTimer.current) }
   }, [formData.checkin, formData.checkout, formData.roomId])
 
+  const bookingPrice = useMemo(() => {
+    if (!room?.price || !formData.checkin || !formData.checkout || formData.checkout <= formData.checkin) {
+      return null
+    }
+    const start = new Date(`${formData.checkin}T00:00:00`)
+    const end = new Date(`${formData.checkout}T00:00:00`)
+    const nights = Math.round((end - start) / (1000 * 60 * 60 * 24))
+    if (nights <= 0) return null
+    return {
+      pricePerNight: room.price,
+      nights,
+      totalAmount: nights * room.price,
+    }
+  }, [room?.price, formData.checkin, formData.checkout])
+
+  const formatPrice = (amount) => `$${Number(amount).toLocaleString()}`
+
   const validate = () => {
     const errors = {}
     if (!formData.name.trim()) errors.name = 'Name is required'
@@ -103,11 +120,24 @@ const HotelDetails = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!validate()) return
+    if (formData.checkout <= formData.checkin) {
+      setNotification({ type: 'error', message: 'Check-out must be after check-in' })
+      return
+    }
     try {
       setSubmitting(true)
+      const availCheck = await axios.get(`${backendUrl}/api/reservation/check-availability`, {
+        params: { roomId: formData.roomId, checkin: formData.checkin, checkout: formData.checkout, roomName: formData.roomName }
+      })
+      if (availCheck.data?.success && !availCheck.data.available) {
+        setAvailability({ checking: false, available: false, message: availCheck.data.message || 'This room is not available for the selected dates.' })
+        setNotification({ type: 'error', message: availCheck.data.message || 'This room is not available for the selected dates.' })
+        return
+      }
       const response = await axios.post(`${backendUrl}/api/reservation/create`, formData)
-      if (response.data.message === 'reservation created successfully') {
+      if (response.data?.success) {
         setNotification({ type: 'success', message: 'Reservation booked successfully!' })
+        setAvailability({ checking: false, available: true, message: '' })
         setFormData(prev => ({
           ...prev,
           name: '',
@@ -122,7 +152,8 @@ const HotelDetails = () => {
       }
     } catch (error) {
       console.error('Booking error:', error)
-      setNotification({ type: 'error', message: 'Error occurred while booking. Please try again.' })
+      const msg = error.response?.data?.message || 'Error occurred while booking. Please try again.'
+      setNotification({ type: 'error', message: msg })
     } finally {
       setSubmitting(false)
     }
@@ -266,6 +297,32 @@ const HotelDetails = () => {
             {!availability.checking && !availability.available && (
               <p className="text-xs text-red-600 text-center">{availability.message}</p>
             )}
+
+            {bookingPrice && (
+              <div className="p-3 border rounded bg-gray-50 space-y-1.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Room price per night</span>
+                  <span className="font-medium">{formatPrice(bookingPrice.pricePerNight)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Check-in</span>
+                  <span className="font-medium">{formData.checkin}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Check-out</span>
+                  <span className="font-medium">{formData.checkout}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Number of nights</span>
+                  <span className="font-medium">{bookingPrice.nights}</span>
+                </div>
+                <div className="flex justify-between pt-1.5 border-t font-bold">
+                  <span>Total booking amount</span>
+                  <span className="text-lime-600">{formatPrice(bookingPrice.totalAmount)}</span>
+                </div>
+              </div>
+            )}
+
             <button
               className="w-full bg-lime-600 text-white p-2 rounded hover:bg-lime-700 transition-colors duration-200 disabled:opacity-60"
               type="submit"

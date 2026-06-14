@@ -39,8 +39,8 @@ const Login = ({ setToken }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#F8FAFC' }}>
-      <form onSubmit={adminLoginHandler} className="w-full max-w-md flex flex-col gap-5 p-8 rounded-xl"
-        style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 4px 16px rgba(15,23,42,0.08)' }}>
+      <form onSubmit={adminLoginHandler} className="w-full max-w-md flex flex-col items-center gap-6 p-12 rounded-xl mb-8"
+        style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 4px 16px rgba(15,23,42,0.08)', minHeight: '480px' }}>
         <div className="text-center mb-2">
           <h1 className="text-lg font-bold" style={{ color: '#1E293B' }}>Abay Grand Hotel</h1>
           <p className="text-xs mt-1" style={{ color: '#64748B' }}>Admin Login</p>
@@ -52,27 +52,29 @@ const Login = ({ setToken }) => {
           </p>
         )}
 
-        <div>
-          <label className="block text-sm mb-1.5 font-bold" style={{ color: '#1E293B' }}>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-            className="w-full px-4 rounded text-sm outline-none"
-            style={{ height: '56px', background: '#F8FAFC', border: '1.5px solid #E2E8F0', color: '#1E293B' }}
-          />
+        <div className="w-full flex flex-col items-center">
+          <label className="block text-sm mb-1.5 font-bold text-center" style={{ color: '#1E293B' }}>Email</label>
+          <div className="w-3/4 max-w-sm">
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              className="w-full px-4 py-3 rounded text-sm outline-none"
+              style={{ height: '56px', background: '#F8FAFC', border: '1.5px solid #E2E8F0', color: '#1E293B' }}
+            />
+          </div>
         </div>
 
-        <div>
-          <label className="block text-sm mb-1.5 font-bold" style={{ color: '#1E293B' }}>Password</label>
-          <div className="relative">
+        <div className="w-full flex flex-col items-center">
+          <label className="block text-sm mb-1.5 font-bold text-center" style={{ color: '#1E293B' }}>Password</label>
+          <div className="relative w-3/4 max-w-sm">
             <input
               type={showPass ? 'text' : 'password'}
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              className="w-full px-4 rounded text-sm outline-none pr-10"
+              className="w-full px-4 py-3 rounded text-sm outline-none pr-10"
               style={{ height: '56px', background: '#F8FAFC', border: '1.5px solid #E2E8F0', color: '#1E293B' }}
             />
             <button type="button" onClick={() => setShowPass(!showPass)}
@@ -82,7 +84,7 @@ const Login = ({ setToken }) => {
           </div>
         </div>
 
-        <Button type="submit" variant="gold" size="lg" loading={loading} className="w-full">
+        <Button type="submit" variant="gold" size="lg" loading={loading} className="w-1/2 mx-auto">
           Sign In
         </Button>
       </form>

@@ -2,38 +2,63 @@ import Reservation from '../models/reservationModels.js'
 import hotelModel from '../models/hotelModels.js'
 import { logActivity } from './activityControllers.js'
 import { createNotification } from './notificationControllers.js'
+import { calculateBookingPrice } from '../utils/pricing.js'
 
-const ACTIVE_STATUSES = ['Pending', 'Approved', 'Checked In']
+const PAYMENT_STATUSES = ['Pending', 'Partially Paid', 'Paid']
 
-const getOverlappingReservations = async (roomId, checkin, checkout, excludeId = null) => {
-  if (!roomId || !checkin || !checkout) return []
+// Block new bookings when these statuses overlap the requested dates
+const BLOCKING_STATUSES = ['Pending', 'Approved', 'Confirmed', 'Checked In']
+// Mark room as occupied (not available) only for these statuses
+const OCCUPIED_STATUSES = ['Approved', 'Confirmed', 'Checked In']
+
+const getOverlappingReservations = async (roomId, checkin, checkout, excludeId = null, roomName = null) => {
+  if (!checkin || !checkout || checkin >= checkout) return []
+  if (!roomId && !roomName) return []
+
   const query = {
-    roomId: String(roomId),
-    status: { $in: ACTIVE_STATUSES },
+    status: { $in: BLOCKING_STATUSES },
     checkin: { $lt: checkout },
     checkout: { $gt: checkin },
   }
   if (excludeId) query._id = { $ne: excludeId }
+
+  if (roomId) {
+    query.roomId = String(roomId)
+  } else if (roomName) {
+    query.roomName = roomName
+  }
+
   return await Reservation.find(query)
 }
 
 const syncRoomStatus = async (roomId) => {
   if (!roomId) return
   try {
-    const activeCount = await Reservation.countDocuments({
+    const occupiedCount = await Reservation.countDocuments({
       roomId: String(roomId),
-      status: { $in: ACTIVE_STATUSES },
+      status: { $in: OCCUPIED_STATUSES },
     })
     const hotel = await hotelModel.findById(roomId)
-    if (hotel) {
-      const shouldBeOccupied = activeCount > 0
-      if (hotel.available === shouldBeOccupied) {
-        hotel.available = !shouldBeOccupied
-        await hotel.save()
-      }
+    if (!hotel) return
+
+    const shouldBeAvailable = occupiedCount === 0
+    if (hotel.available !== shouldBeAvailable) {
+      hotel.available = shouldBeAvailable
+      await hotel.save()
     }
   } catch (error) {
     console.error('syncRoomStatus error:', error?.message || error)
+  }
+}
+
+const syncAllRoomStatuses = async () => {
+  try {
+    const hotels = await hotelModel.find({})
+    for (const hotel of hotels) {
+      await syncRoomStatus(hotel._id.toString())
+    }
+  } catch (error) {
+    console.error('syncAllRoomStatuses error:', error?.message || error)
   }
 }
 
@@ -64,15 +89,45 @@ const createReservation = async (req, res) => {
     if (!name || !email || !checkin || !checkout || !guests || !roomName) {
       return res.json({ success: false, message: 'All fields are required' })
     }
+    if (checkin >= checkout) {
+      return res.json({ success: false, message: 'Check-out date must be after check-in date' })
+    }
 
-    const overlapping = await getOverlappingReservations(roomId, checkin, checkout)
+    let resolvedRoomId = roomId ? String(roomId) : ''
+    if (!resolvedRoomId && roomName) {
+      const hotel = await hotelModel.findOne({ name: roomName })
+      if (hotel) resolvedRoomId = hotel._id.toString()
+    }
+    if (!resolvedRoomId) {
+      return res.json({ success: false, message: 'Room ID is required for booking validation' })
+    }
+
+    const overlapping = await getOverlappingReservations(resolvedRoomId, checkin, checkout, null, roomName)
     if (overlapping.length > 0) {
-      return res.json({ success: false, message: 'This room is already booked for the selected dates. Please choose different dates or another room.' })
+      return res.json({
+        success: false,
+        message: 'This room is already booked for the selected dates. Please choose different dates or another room.',
+      })
+    }
+
+    const hotel = await hotelModel.findById(resolvedRoomId)
+    if (!hotel) {
+      return res.json({ success: false, message: 'Room not found' })
+    }
+
+    const pricing = calculateBookingPrice(hotel.price, checkin, checkout)
+    if (pricing.nights <= 0) {
+      return res.json({ success: false, message: 'Invalid booking dates' })
     }
 
     const clientInfo = getClientInfo(req.body)
     const newReservation = new Reservation({
-      name, email, phone, checkin, checkout, guests, roomName, roomId,
+      name, email, phone, checkin, checkout, guests, roomName,
+      roomId: resolvedRoomId,
+      pricePerNight: pricing.pricePerNight,
+      nights: pricing.nights,
+      totalAmount: pricing.totalAmount,
+      paymentStatus: 'Pending',
       status: 'Pending',
       createdBy: clientInfo,
     })
@@ -131,6 +186,17 @@ const approveReservation = async (req, res) => {
     if (existing.status !== 'Pending') {
       return res.json({ success: false, message: `Cannot approve a reservation with status "${existing.status}"` })
     }
+
+    const overlapping = await getOverlappingReservations(
+      existing.roomId, existing.checkin, existing.checkout, id, existing.roomName
+    )
+    if (overlapping.length > 0) {
+      return res.json({
+        success: false,
+        message: 'Cannot approve: this room is already booked for the selected dates.',
+      })
+    }
+
     const adminInfo = getAdminInfo(req)
     existing.status = 'Approved'
     existing.approvedBy = adminInfo
@@ -354,6 +420,7 @@ const updateReservation = async (req, res) => {
     const { id } = req.params
     const existing = await Reservation.findById(id)
     if (!existing) return res.status(404).json({ success: false, message: 'Reservation not found' })
+
     const updateData = {}
     if (req.body.name !== undefined) updateData.name = req.body.name
     if (req.body.email !== undefined) updateData.email = req.body.email
@@ -363,14 +430,49 @@ const updateReservation = async (req, res) => {
     if (req.body.checkin !== undefined) updateData.checkin = req.body.checkin
     if (req.body.checkout !== undefined) updateData.checkout = req.body.checkout
     if (req.body.guests !== undefined) updateData.guests = Number(req.body.guests)
+    if (req.body.paymentStatus !== undefined) {
+      if (!PAYMENT_STATUSES.includes(req.body.paymentStatus)) {
+        return res.json({ success: false, message: 'Invalid payment status' })
+      }
+      updateData.paymentStatus = req.body.paymentStatus
+    }
 
     const newCheckin = req.body.checkin || existing.checkin
     const newCheckout = req.body.checkout || existing.checkout
     const newRoomId = req.body.roomId || existing.roomId
+    const newRoomName = req.body.roomName || existing.roomName
 
-    const overlapping = await getOverlappingReservations(newRoomId, newCheckin, newCheckout, id)
+    if (newCheckin >= newCheckout) {
+      return res.json({ success: false, message: 'Check-out date must be after check-in date' })
+    }
+
+    const overlapping = await getOverlappingReservations(newRoomId, newCheckin, newCheckout, id, newRoomName)
     if (overlapping.length > 0) {
-      return res.json({ success: false, message: 'This room is already booked for the selected dates. Please choose different dates or another room.' })
+      return res.json({
+        success: false,
+        message: 'This room is already booked for the selected dates. Please choose different dates or another room.',
+      })
+    }
+
+    const datesOrRoomChanged =
+      req.body.checkin !== undefined ||
+      req.body.checkout !== undefined ||
+      req.body.roomId !== undefined ||
+      req.body.roomName !== undefined
+
+    if (datesOrRoomChanged) {
+      let roomPrice = existing.pricePerNight
+      if (newRoomId) {
+        const hotel = await hotelModel.findById(newRoomId)
+        if (hotel) roomPrice = hotel.price
+      }
+      const pricing = calculateBookingPrice(roomPrice, newCheckin, newCheckout)
+      if (pricing.nights <= 0) {
+        return res.json({ success: false, message: 'Invalid booking dates' })
+      }
+      updateData.pricePerNight = pricing.pricePerNight
+      updateData.nights = pricing.nights
+      updateData.totalAmount = pricing.totalAmount
     }
 
     const adminInfo = getAdminInfo(req)
@@ -378,7 +480,14 @@ const updateReservation = async (req, res) => {
       updateData.updatedBy = { ...adminInfo, actionDate: new Date() }
     }
 
+    const oldRoomId = existing.roomId
     const updated = await Reservation.findByIdAndUpdate(id, updateData, { new: true })
+
+    await syncRoomStatus(oldRoomId)
+    if (updated.roomId && updated.roomId !== oldRoomId) {
+      await syncRoomStatus(updated.roomId)
+    }
+
     logActivity({
       action: 'Reservation Updated',
       userId: adminInfo?.userId || '',
@@ -412,12 +521,29 @@ const deleteReservation = async (req, res) => {
 
 const checkAvailability = async (req, res) => {
   try {
-    const { roomId, checkin, checkout } = req.query
-    if (!roomId || !checkin || !checkout) {
-      return res.json({ success: false, message: 'roomId, checkin, and checkout are required' })
+    const { roomId, checkin, checkout, excludeId, roomName } = req.query
+    if ((!roomId && !roomName) || !checkin || !checkout) {
+      return res.json({ success: false, message: 'roomId (or roomName), checkin, and checkout are required' })
     }
-    const overlapping = await getOverlappingReservations(roomId, checkin, checkout)
-    res.json({ success: true, available: overlapping.length === 0 })
+    if (checkin >= checkout) {
+      return res.json({ success: true, available: false, message: 'Check-out must be after check-in' })
+    }
+    const overlapping = await getOverlappingReservations(roomId, checkin, checkout, excludeId || null, roomName || null)
+
+    let pricing = null
+    if (roomId && checkin < checkout) {
+      const hotel = await hotelModel.findById(roomId)
+      if (hotel) {
+        pricing = calculateBookingPrice(hotel.price, checkin, checkout)
+      }
+    }
+
+    res.json({
+      success: true,
+      available: overlapping.length === 0,
+      message: overlapping.length > 0 ? 'This room is already booked for the selected dates.' : '',
+      pricing,
+    })
   } catch (error) {
     console.error('checkAvailability error:', error?.message || error)
     res.json({ success: false, message: 'Error checking availability' })
@@ -438,4 +564,8 @@ export {
   deleteReservation,
   checkAvailability,
   getOverlappingReservations,
+  syncRoomStatus,
+  syncAllRoomStatuses,
+  BLOCKING_STATUSES,
+  OCCUPIED_STATUSES,
 }

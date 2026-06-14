@@ -34,7 +34,10 @@ export const SettingsContext = createContext()
 export const useSettings = () => useContext(SettingsContext)
 
 const App = () => {
-  const [token, setTokenState] = useState('')
+  const [token, setTokenState] = useState(() => {
+    try { return localStorage.getItem('adminToken') || '' } catch { return '' }
+  })
+  const [initialized, setInitialized] = useState(false)
   const [darkMode, setDarkMode] = useState(() => {
     try { return localStorage.getItem('abay-theme') === 'dark' } catch { return false }
   })
@@ -47,7 +50,17 @@ const App = () => {
 
   const setToken = (t) => {
     setTokenState(t)
-    try { if (t) localStorage.setItem('adminToken', t); else localStorage.removeItem('adminToken') } catch {}
+    try {
+      if (t) localStorage.setItem('adminToken', t)
+      else {
+        localStorage.removeItem('adminToken')
+        try {
+          const err = new Error('token-cleared')
+          localStorage.setItem('adminTokenClearedAt', new Date().toISOString())
+          localStorage.setItem('adminTokenClearedStack', err.stack || '')
+        } catch {}
+      }
+    } catch {}
   }
 
   const getAuthHeaders = () => {
@@ -77,6 +90,32 @@ const App = () => {
     try { localStorage.setItem('abay-theme', darkMode ? 'dark' : 'light') } catch {}
   }, [darkMode])
 
+  useEffect(() => {
+    try { const t = localStorage.getItem('adminToken'); if (t) setTokenState(t) }
+    catch {}
+    setInitialized(true)
+  }, [])
+
+  // Debug helper: record last click target so we can trace unexpected logouts
+  useEffect(() => {
+    const handler = (e) => {
+      try {
+        const t = e.target
+        const info = {
+          tag: t.tagName,
+          id: t.id || null,
+          classes: t.className || null,
+          text: (t.innerText || t.textContent || '').trim().slice(0, 120),
+          time: new Date().toISOString(),
+        }
+        localStorage.setItem('adminLastClick', JSON.stringify(info))
+      } catch {}
+    }
+    document.addEventListener('click', handler, true)
+    return () => document.removeEventListener('click', handler, true)
+  }, [])
+
+  if (!initialized) return null
   if (!token) return <Login setToken={setToken} />
 
   return (

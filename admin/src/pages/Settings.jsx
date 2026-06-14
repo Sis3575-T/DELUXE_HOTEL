@@ -78,7 +78,9 @@ const Settings = () => {
   }
 
   const addSocialLink = () => {
-    setForm(prev => ({ ...prev, socialLinks: [...prev.socialLinks, { platform: '', url: '' }] }))
+    console.log('addSocialLink invoked')
+    notify.info('Adding link...')
+    setForm(prev => ({ ...prev, socialLinks: [...(prev.socialLinks || []), { platform: '', url: '' }] }))
   }
 
   const removeSocialLink = (index) => {

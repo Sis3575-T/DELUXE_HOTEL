@@ -1,5 +1,5 @@
 import hotelModel from "../models/hotelModels.js";
-import Reservation from '../models/reservationModels.js'
+import { getOverlappingReservations } from '../controllers/reservationControllers.js'
 import { v2 as cloudinary } from "cloudinary";
 
 const uploadImages = async (files) => {
@@ -121,14 +121,17 @@ const getAvailableRooms = async (req, res) => {
     if (!checkin || !checkout) {
       return res.status(400).json({ success: false, message: 'Check-in and check-out dates are required' })
     }
+    if (checkin >= checkout) {
+      return res.status(400).json({ success: false, message: 'Check-out must be after check-in' })
+    }
     const allRooms = await hotelModel.find({})
-    const overlappingReservations = await Reservation.find({
-      status: { $in: ['Pending', 'Approved', 'Checked In'] },
-      checkin: { $lt: checkout },
-      checkout: { $gt: checkin },
-    })
-    const reservedRoomIds = new Set(overlappingReservations.map(r => r.roomId))
-    const availableRooms = allRooms.filter(r => !reservedRoomIds.has(r._id.toString()))
+    const availableRooms = []
+    for (const room of allRooms) {
+      const overlapping = await getOverlappingReservations(
+        room._id.toString(), checkin, checkout, null, room.name
+      )
+      if (overlapping.length === 0) availableRooms.push(room)
+    }
     return res.json({ success: true, rooms: availableRooms })
   } catch (error) {
     console.error('getAvailableRooms error:', error?.message || error)

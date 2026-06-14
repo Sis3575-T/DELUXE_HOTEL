@@ -14,7 +14,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog'
 import DataTable from '../components/ui/DataTable'
 import notify from '../components/ui/Toast'
 
-const STATUSES = ['All', 'Pending', 'Approved', 'Confirmed', 'Rejected', 'Checked In', 'Checked Out', 'Cancelled']
+const STATUSES = ['All', 'Pending', 'Approved', 'Rejected', 'Checked In', 'Checked Out', 'Cancelled']
 
 const normalizeStatus = (s) => s === 'Confirmed' ? 'Approved' : s
 
@@ -66,6 +66,25 @@ const AuditEntry = ({ label, data }) => {
   )
 }
 
+const formatPrice = (amount) => {
+  if (amount == null || amount === '') return '—'
+  return `ETB ${Number(amount).toLocaleString()}`
+}
+
+const paymentBadge = (status) => {
+  const map = {
+    'Pending': { bg: '#FEF3C7', color: '#D97706' },
+    'Partially Paid': { bg: '#DBEAFE', color: '#2563EB' },
+    'Paid': { bg: '#DCFCE7', color: '#16A34A' },
+  }
+  const s = map[status] || map['Pending']
+  return (
+    <span className="px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap" style={{ background: s.bg, color: s.color }}>
+      {status || 'Pending'}
+    </span>
+  )
+}
+
 const Reservation = () => {
   const [reservations, setReservations] = useState([])
   const [rooms, setRooms] = useState([])
@@ -89,6 +108,7 @@ const Reservation = () => {
   const [formCheckout, setFormCheckout] = useState('')
   const [formGuests, setFormGuests] = useState(1)
   const [formStatus, setFormStatus] = useState('Pending')
+  const [formPaymentStatus, setFormPaymentStatus] = useState('Pending')
   const [errors, setErrors] = useState({})
 
   const getAuthHeaders = () => {
@@ -141,6 +161,11 @@ const Reservation = () => {
       if (res.data?.success) {
         notify.success(successMsg)
         await fetchReservations()
+        // Refresh room list so availability badges stay in sync
+        try {
+          const roomsRes = await axios.get(backendUrl + '/api/hotel/list')
+          if (roomsRes.data?.hotels) setRooms(roomsRes.data.hotels)
+        } catch {}
       } else {
         notify.error(res.data?.message || `${action} failed`)
       }
@@ -162,6 +187,7 @@ const Reservation = () => {
     setFormCheckout(res.checkout || '')
     setFormGuests(res.guests || 1)
     setFormStatus(res.status || 'Pending')
+    setFormPaymentStatus(res.paymentStatus || 'Pending')
     setErrors({})
     setEditModal(true)
   }
@@ -185,23 +211,27 @@ const Reservation = () => {
     try {
       const roomId = selected.roomId || rooms.find(r => r.name === formRoom)?._id || ''
       const checkRes = await axios.get(`${backendUrl}/api/reservation/check-availability`, {
-        params: { roomId, checkin: formCheckin, checkout: formCheckout }
+        params: { roomId, checkin: formCheckin, checkout: formCheckout, excludeId: selected._id, roomName: formRoom }
       })
       if (checkRes.data?.success && !checkRes.data.available) {
-        setDateConflictMsg('This room is already booked for the selected dates.')
+        setDateConflictMsg(checkRes.data.message || 'This room is already booked for the selected dates.')
         setEditLoading(false)
         return
       }
       const res = await axios.put(`${backendUrl}/api/reservation/update/${selected._id}`, {
         name: formName, email: formEmail, phone: formPhone,
-        roomName: formRoom, checkin: formCheckin, checkout: formCheckout,
-        guests: formGuests,
+        roomName: formRoom, roomId, checkin: formCheckin, checkout: formCheckout,
+        guests: formGuests, paymentStatus: formPaymentStatus,
       }, { headers: getAuthHeaders() })
       if (res.data?.success) {
         notify.success('Reservation updated successfully')
         setEditModal(false)
         setSelected(null)
         await fetchReservations()
+        try {
+          const roomsRes = await axios.get(backendUrl + '/api/hotel/list')
+          if (roomsRes.data?.hotels) setRooms(roomsRes.data.hotels)
+        } catch {}
       } else {
         notify.error(res.data?.message || 'Update failed')
       }
@@ -223,6 +253,10 @@ const Reservation = () => {
       notify.success(res.data?.message || 'Reservation deleted')
       setDeleteTarget(null)
       await fetchReservations()
+      try {
+        const roomsRes = await axios.get(backendUrl + '/api/hotel/list')
+        if (roomsRes.data?.hotels) setRooms(roomsRes.data.hotels)
+      } catch {}
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Delete failed'
       notify.error(msg)
@@ -473,11 +507,17 @@ const Reservation = () => {
                 ['Guests', selected.guests],
                 ['Check-in', selected.checkin],
                 ['Check-out', selected.checkout],
+                ['Nights', selected.nights || '—'],
+                ['Price per Night', selected.pricePerNight ? formatPrice(selected.pricePerNight) : '—'],
+                ['Total Amount', selected.totalAmount ? formatPrice(selected.totalAmount) : '—'],
+                ['Payment Status', selected.paymentStatus || 'Pending'],
                 ['Status', selected.status || 'Pending'],
               ].map(([label, value]) => (
                 <div key={label} className="flex items-start justify-between py-3 border-b" style={{ borderColor: '#E5E7EB' }}>
                   <span className="text-sm font-medium" style={{ color: '#6B7280' }}>{label}</span>
-                  <span className="text-sm font-semibold" style={{ color: '#1E293B' }}>{value || '\u2014'}</span>
+                  <span className="text-sm font-semibold" style={{ color: '#1E293B' }}>
+                    {label === 'Payment Status' ? paymentBadge(value) : (value || '\u2014')}
+                  </span>
                 </div>
               ))}
             </div>
@@ -551,6 +591,14 @@ const Reservation = () => {
               </label>
               <input type="number" min="1" className={`input-field ${errors.guests ? 'error' : ''}`} value={formGuests} onChange={e => setFormGuests(Number(e.target.value))} />
               {errors.guests && <p className="text-xs mt-1" style={{ color: '#DC2626' }}>{errors.guests}</p>}
+            </div>
+            <div>
+              <label className="block text-xs font-semibold" style={{ color: '#6B7280', marginBottom: '6px' }}>Payment Status</label>
+              <select className="input-field" value={formPaymentStatus} onChange={e => setFormPaymentStatus(e.target.value)}>
+                <option value="Pending">Pending</option>
+                <option value="Partially Paid">Partially Paid</option>
+                <option value="Paid">Paid</option>
+              </select>
             </div>
           </div>
           {dateConflictMsg && (

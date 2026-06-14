@@ -194,10 +194,27 @@ textarea.input-field {
   backdrop-filter: blur(4px);
   z-index: 10000;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 16px;
+  padding: calc(var(--topbar-height, 72px) + 12px) 16px 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
+
+/* Sticky action row inside modal to keep buttons visible */
+.modal-overlay .modal-action-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  padding: 12px 16px 16px;
+  gap: 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), var(--bg-card));
+  backdrop-filter: blur(6px);
+  z-index: 40;
+}
+.modal-overlay .modal-action-row > * { z-index: 41 }
 
 /* Toast */
 .Toastify__toast {

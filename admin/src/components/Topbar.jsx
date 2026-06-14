@@ -45,6 +45,7 @@ const Topbar = ({ setToken }) => {
   const [notifLoading, setNotifLoading] = useState(true)
   const notifRef = useRef(null)
   const profileRef = useRef(null)
+  const headerRef = useRef(null)
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -63,6 +64,18 @@ const Topbar = ({ setToken }) => {
     const interval = setInterval(fetchNotifications, 30000)
     return () => clearInterval(interval)
   }, [fetchNotifications])
+
+  useEffect(() => {
+    const setVar = () => {
+      try {
+        const h = headerRef.current ? headerRef.current.offsetHeight : 72
+        document.documentElement.style.setProperty('--topbar-height', `${h}px`)
+      } catch (e) {}
+    }
+    setVar()
+    window.addEventListener('resize', setVar)
+    return () => window.removeEventListener('resize', setVar)
+  }, [])
 
   const handleMarkAllRead = async () => {
     try {
@@ -97,6 +110,7 @@ const Topbar = ({ setToken }) => {
 
   return (
     <header
+      ref={headerRef}
       className="fixed top-0 z-30 flex items-center justify-between px-4 md:px-6 transition-all duration-300 right-0"
       style={{
         height: 72,
@@ -128,22 +142,24 @@ const Topbar = ({ setToken }) => {
         />
       </div>
 
-      <div className="flex items-center gap-2 md:gap-3 ml-auto">
+      <div className="flex items-center gap-2 md:gap-3" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
         <button
           onClick={() => setDarkMode(!darkMode)}
           className="w-10 h-10 rounded-lg flex items-center justify-center transition-all hover:scale-105"
           style={iconBtnStyle}
           title="Toggle dark mode"
+          type="button"
+          aria-label="Toggle dark mode"
         >
           {darkMode ? <MdLightMode size={18} style={{ color: '#D4AF37' }} /> : <MdDarkMode size={18} />}
         </button>
-
         <div className="relative" ref={notifRef}>
           <button
-            onClick={() => { setShowNotif(!showNotif); setShowProfile(false); if (!showNotif) fetchNotifications() }}
+            onClick={(e) => { e && e.stopPropagation(); setShowNotif(!showNotif); setShowProfile(false); if (!showNotif) fetchNotifications() }}
             className="w-10 h-10 rounded-lg flex items-center justify-center relative transition-all hover:scale-105"
             style={iconBtnStyle}
             aria-label="Notifications"
+            type="button"
           >
             <MdNotifications size={18} />
             {unreadCount > 0 && (

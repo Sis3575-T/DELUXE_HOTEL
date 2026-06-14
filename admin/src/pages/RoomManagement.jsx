@@ -50,7 +50,11 @@ const RoomManagement = ({ token }) => {
 
   useEffect(() => { fetchRooms() }, [])
 
-  const openAdd = () => {
+
+
+  const openAdd = (e) => {
+    if (e && e.preventDefault) e.preventDefault()
+    if (e && e.stopPropagation) e.stopPropagation()
     setEditRoom(null)
     setName('')
     setDescription('')
@@ -64,7 +68,9 @@ const RoomManagement = ({ token }) => {
     setShowModal(true)
   }
 
-  const openEdit = (room) => {
+  const openEdit = (room, e) => {
+    if (e && e.preventDefault) e.preventDefault()
+    if (e && e.stopPropagation) e.stopPropagation()
     setEditRoom(room)
     setName(room.name || '')
     setDescription(room.description || '')
@@ -130,18 +136,21 @@ const RoomManagement = ({ token }) => {
 
   const deleteRoom = async () => {
     if (!deleteTarget) return
+    console.log('deleteRoom invoked, target:', deleteTarget)
+    notify.info('Deleting room...')
     setDeleteLoading(true)
     try {
-      const res = await axios.post(backendUrl + '/api/hotel/remove', { id: deleteTarget._id }, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const authToken = localStorage.getItem('adminToken') || token || ''
+      const headers = authToken ? { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }
+      const res = await axios.post(backendUrl + '/api/hotel/remove', { id: deleteTarget._id }, { headers })
       if (res.data?.success) {
         notify.success('Room deleted successfully')
+        setDeleteTarget(null)
+        await fetchRooms()
       } else {
         notify.error(res.data?.message || 'Failed to delete room')
+        setDeleteTarget(null)
       }
-      setDeleteTarget(null)
-      await fetchRooms()
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Delete error'
       notify.error(msg)
@@ -166,7 +175,7 @@ const RoomManagement = ({ token }) => {
           <h1 className="text-xl font-bold" style={{ color: '#1E293B', fontFamily: "'Playfair Display', serif" }}>Room Management</h1>
           <p className="text-sm mt-1" style={{ color: '#6B7280' }}>{rooms.length} rooms total</p>
         </div>
-        <Button variant="gold" icon={MdAdd} onClick={openAdd}>Add New Room</Button>
+        <Button variant="gold" icon={MdAdd} onClick={(e) => openAdd(e)}>Add New Room</Button>
       </div>
 
       {/* Search bar */}
@@ -212,17 +221,7 @@ const RoomManagement = ({ token }) => {
                       <span style={{ fontSize: '2rem' }}>{'\uD83C\uDFE8'}</span>
                     </div>
                   )}
-                  <div className="absolute" style={{ top: '12px', right: '12px' }}>
-                    <span
-                      className="px-2.5 py-1 rounded text-xs font-semibold"
-                      style={{
-                        background: room.available !== false ? '#DCFCE7' : '#FEE2E2',
-                        color: room.available !== false ? '#16A34A' : '#DC2626',
-                      }}
-                    >
-                      {room.available !== false ? 'Available' : 'Occupied'}
-                    </span>
-                  </div>
+                  {/* Availability badge removed as requested */}
                   <div className="absolute" style={{ top: '12px', left: '12px' }}>
                     <span
                       className="px-2.5 py-1 rounded text-xs font-semibold"
@@ -261,8 +260,8 @@ const RoomManagement = ({ token }) => {
                     <p className="text-xs" style={{ color: '#6B7280', marginBottom: '16px' }}>{room.description}</p>
                   )}
                   <div className="flex" style={{ gap: '10px' }}>
-                    <Button variant="primary" size="sm" icon={MdEdit} onClick={() => openEdit(room)} className="flex-1">Edit</Button>
-                    <Button variant="danger" size="sm" icon={MdDelete} onClick={() => setDeleteTarget(room)} className="flex-1">Delete</Button>
+                    <Button variant="primary" size="sm" icon={MdEdit} onClick={(e) => openEdit(room, e)} className="flex-1">Edit</Button>
+                    <Button variant="danger" size="sm" icon={MdDelete} onClick={(e) => { if (e && e.stopPropagation) e.stopPropagation(); setDeleteTarget(room) }} className="flex-1">Delete</Button>
                   </div>
                 </div>
               </div>
@@ -407,7 +406,7 @@ const RoomManagement = ({ token }) => {
             </div>
           </div>
 
-          <div className="flex" style={{ gap: '10px', paddingTop: '8px' }}>
+          <div className="flex modal-action-row" style={{ gap: '10px', paddingTop: '8px' }}>
             <Button variant="secondary" onClick={() => setShowModal(false)} className="flex-1">Cancel</Button>
             <Button
               type="submit"

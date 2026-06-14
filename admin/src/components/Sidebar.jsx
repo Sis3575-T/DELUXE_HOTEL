@@ -22,7 +22,6 @@ const Sidebar = ({ setToken }) => {
   const { sidebarCollapsed, setSidebarCollapsed } = useTheme()
   const { settings } = useSettings()
   const [collapsed, setCollapsed] = useState(sidebarCollapsed)
-  const [mobileOpen, setMobileOpen] = useState(false)
   const navigate = useNavigate()
 
   const hotelName = settings?.hotelName || 'Abay Grand Hotel'
@@ -39,24 +38,14 @@ const Sidebar = ({ setToken }) => {
       <button
         className="fixed top-4 left-4 z-[10001] md:hidden p-2.5 rounded-lg shadow-lg transition-all"
         style={{ background: '#1E293B' }}
-        onClick={() => setMobileOpen(!mobileOpen)}
+        onClick={() => setCollapsed(!collapsed)}
         aria-label="Toggle menu"
       >
-        {mobileOpen ? <MdClose size={22} color="#D4AF37" /> : <MdMenu size={22} color="#D4AF37" />}
+        {collapsed ? <MdMenu size={22} color="#D4AF37" /> : <MdClose size={22} color="#D4AF37" />}
       </button>
 
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 z-[10000] md:hidden backdrop-blur-sm"
-          style={{ background: 'rgba(15, 23, 42, 0.6)' }}
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
       <aside
-        className={`fixed left-0 top-0 h-full z-50 flex flex-col transition-all duration-300 ${
-          collapsed ? 'w-[72px]' : 'w-[260px]'
-        } ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
+        className={`fixed left-0 top-0 h-full z-50 flex flex-col transition-all duration-300 ${collapsed ? 'w-[72px]' : 'w-[260px]'} translate-x-0`}
         style={{
           background: 'linear-gradient(180deg, #0F172A 0%, #1E293B 100%)',
           borderRight: '1px solid rgba(212, 175, 55, 0.12)',
@@ -103,12 +92,11 @@ const Sidebar = ({ setToken }) => {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-5">
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-3">
             {navItems.map(({ to, icon: Icon, label }) => (
               <NavLink
                 key={to}
                 to={to}
-                onClick={() => setMobileOpen(false)}
                 className="block rounded-lg transition-all duration-200"
               >
                 {({ isActive }) => (

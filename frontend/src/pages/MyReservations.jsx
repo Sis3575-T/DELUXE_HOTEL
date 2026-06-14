@@ -33,6 +33,25 @@ const formatDate = (d) => {
   return d
 }
 
+const formatPrice = (amount) => {
+  if (amount == null || amount === '') return '—'
+  return `$${Number(amount).toLocaleString()}`
+}
+
+const paymentBadge = (status) => {
+  const map = {
+    'Pending': { bg: '#FEF3C7', color: '#D97706' },
+    'Partially Paid': { bg: '#DBEAFE', color: '#2563EB' },
+    'Paid': { bg: '#DCFCE7', color: '#16A34A' },
+  }
+  const s = map[status] || map['Pending']
+  return (
+    <span className="px-2 py-1 rounded text-xs font-semibold whitespace-nowrap" style={{ background: s.bg, color: s.color }}>
+      {status || 'Pending'}
+    </span>
+  )
+}
+
 const MyReservations = () => {
   const [email, setEmail] = useState('')
   const [submittedEmail, setSubmittedEmail] = useState('')
@@ -232,6 +251,14 @@ const MyReservations = () => {
                         <div><span className="font-medium" style={{ color: '#6B7280' }}>Guests:</span> <span style={{ color: '#1E293B' }}>{res.guests}</span></div>
                         <div><span className="font-medium" style={{ color: '#6B7280' }}>Check-in:</span> <span style={{ color: '#1E293B' }}>{formatDate(res.checkin)}</span></div>
                         <div><span className="font-medium" style={{ color: '#6B7280' }}>Check-out:</span> <span style={{ color: '#1E293B' }}>{formatDate(res.checkout)}</span></div>
+                        {res.pricePerNight > 0 && (
+                          <>
+                            <div><span className="font-medium" style={{ color: '#6B7280' }}>Price per night:</span> <span style={{ color: '#1E293B' }}>{formatPrice(res.pricePerNight)}</span></div>
+                            <div><span className="font-medium" style={{ color: '#6B7280' }}>Nights:</span> <span style={{ color: '#1E293B' }}>{res.nights || '—'}</span></div>
+                            <div><span className="font-medium" style={{ color: '#6B7280' }}>Total amount:</span> <span className="font-semibold" style={{ color: '#1E293B' }}>{formatPrice(res.totalAmount)}</span></div>
+                            <div><span className="font-medium" style={{ color: '#6B7280' }}>Payment:</span> {paymentBadge(res.paymentStatus)}</div>
+                          </>
+                        )}
                         {res.createdBy?.name && (
                           <div className="col-span-2">
                             <span className="font-medium" style={{ color: '#6B7280' }}>Booked by:</span>{' '}

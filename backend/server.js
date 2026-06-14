@@ -36,7 +36,15 @@ import hotelRouter from './routes/hotelRoute.js'*/
 
 const app = express()
 const port = process.env.PORT || 4000
-connectDB()
+connectDB().then(async () => {
+  try {
+    const { syncAllRoomStatuses } = await import('./controllers/reservationControllers.js')
+    await syncAllRoomStatuses()
+    console.log('Room availability statuses synchronized')
+  } catch (err) {
+    console.error('Room status sync on startup:', err?.message || err)
+  }
+})
 connectCloudinary()
 app.use(cors())
 app.use(express.json())
