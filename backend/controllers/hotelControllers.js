@@ -1,24 +1,38 @@
 import hotelModel from "../models/hotelModels.js";
+import Reservation from '../models/reservationModels.js'
 import { v2 as cloudinary } from "cloudinary";
+
+const uploadImages = async (files) => {
+	const urls = [];
+	for (const file of files) {
+		if (!file?.path) continue;
+		const result = await cloudinary.uploader.upload(file.path, { resource_type: 'image' });
+		const url = result?.secure_url || result?.secureUrl;
+		if (url) urls.push(url);
+	}
+	return urls;
+};
 
 const addHotel = async (req, res) => {
 	try {
 		const { name, price, description, roomType, capacity, available } = req.body;
-		const image = req.file;
+		const files = req.files?.length ? req.files : (req.file ? [req.file] : []);
 
-		if (!image || !image.path) {
-			return res.status(400).json({ success: false, message: 'Image is required (form field name: "image")' });
+		if (!files.length) {
+			return res.status(400).json({ success: false, message: 'At least one image is required (form field name: "images")' });
 		}
 
-		let imageUrl = "https://via.placeholder.com/150";
-		const result = await cloudinary.uploader.upload(image.path, { resource_type: 'image' });
-		imageUrl = result?.secure_url || result?.secureUrl || result?.secure_Url || imageUrl;
+		const uploaded = await uploadImages(files);
+		if (!uploaded.length) {
+			return res.status(400).json({ success: false, message: 'Failed to upload images' });
+		}
 
 		const hotelData = {
 			name,
 			description,
 			price: Number(price) || 0,
-			image: imageUrl,
+			image: uploaded[0],
+			images: uploaded,
 			roomType: roomType || 'Standard',
 			capacity: Number(capacity) || 2,
 			available: available === 'true' || available === true,
@@ -57,10 +71,13 @@ const editHotel = async (req, res) => {
 		if (capacity) updateData.capacity = Number(capacity);
 		if (available !== undefined) updateData.available = available === 'true' || available === true;
 
-		const image = req.file;
-		if (image && image.path) {
-			const result = await cloudinary.uploader.upload(image.path, { resource_type: 'image' });
-			updateData.image = result?.secure_url || result?.secureUrl || updateData.image;
+		const files = req.files?.length ? req.files : (req.file ? [req.file] : []);
+		if (files.length) {
+			const uploaded = await uploadImages(files);
+			if (uploaded.length) {
+				updateData.image = uploaded[0];
+				updateData.images = uploaded;
+			}
 		}
 
 		const updated = await hotelModel.findByIdAndUpdate(id, updateData, { new: true });
@@ -80,8 +97,8 @@ const removeHotel = async (req, res) => {
 		if (!deleted) return res.status(404).json({ success: false, message: 'Hotel not found' });
 		return res.json({ success: true, message: 'Hotel room removed successfully', hotel: deleted });
 	} catch (error) {
-		console.error( error);
-		 res.json({ success: false, message: "error deleting hotel room" });
+		console.error(error);
+		res.json({ success: false, message: "error deleting hotel room" });
 	}
 };
 
@@ -98,4 +115,25 @@ const singleHotel = async (req, res) => {
 	}
 };
 
-export { addHotel, listHotel, editHotel, removeHotel, singleHotel };
+const getAvailableRooms = async (req, res) => {
+  try {
+    const { checkin, checkout } = req.query
+    if (!checkin || !checkout) {
+      return res.status(400).json({ success: false, message: 'Check-in and check-out dates are required' })
+    }
+    const allRooms = await hotelModel.find({})
+    const overlappingReservations = await Reservation.find({
+      status: { $in: ['Pending', 'Approved', 'Checked In'] },
+      checkin: { $lt: checkout },
+      checkout: { $gt: checkin },
+    })
+    const reservedRoomIds = new Set(overlappingReservations.map(r => r.roomId))
+    const availableRooms = allRooms.filter(r => !reservedRoomIds.has(r._id.toString()))
+    return res.json({ success: true, rooms: availableRooms })
+  } catch (error) {
+    console.error('getAvailableRooms error:', error?.message || error)
+    return res.status(500).json({ success: false, message: 'Error fetching available rooms' })
+  }
+}
+
+export { addHotel, listHotel, editHotel, removeHotel, singleHotel, getAvailableRooms };

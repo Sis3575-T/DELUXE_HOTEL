@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import { backendUrl } from '../App'
@@ -11,6 +11,8 @@ const HotelDetails = () => {
   const [submitting, setSubmitting] = useState(false)
   const [notification, setNotification] = useState(null)
   const [formErrors, setFormErrors] = useState({})
+  const [availability, setAvailability] = useState({ checking: false, available: true, message: '' })
+  const availabilityTimer = useRef(null)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -47,9 +49,37 @@ const HotelDetails = () => {
   }, [id])
 
   const handleChange = (e) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
-    setFormErrors(prev => ({ ...prev, [e.target.name]: '' }))
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+    setFormErrors(prev => ({ ...prev, [name]: '' }))
+    if (name === 'checkin' || name === 'checkout') {
+      if (availabilityTimer.current) clearTimeout(availabilityTimer.current)
+      setAvailability(prev => ({ ...prev, checking: true, message: '' }))
+    }
   }
+
+  useEffect(() => {
+    const { checkin, checkout, roomId } = formData
+    if (!checkin || !checkout || !roomId) return
+    if (availabilityTimer.current) clearTimeout(availabilityTimer.current)
+    availabilityTimer.current = setTimeout(async () => {
+      try {
+        const r = await axios.get(`${backendUrl}/api/reservation/check-availability`, {
+          params: { roomId, checkin, checkout }
+        })
+        if (r.data?.success) {
+          setAvailability({
+            checking: false,
+            available: r.data.available,
+            message: r.data.available ? '' : 'This room is not available for the selected dates.'
+          })
+        }
+      } catch {
+        setAvailability({ checking: false, available: true, message: '' })
+      }
+    }, 500)
+    return () => { if (availabilityTimer.current) clearTimeout(availabilityTimer.current) }
+  }, [formData.checkin, formData.checkout, formData.roomId])
 
   const validate = () => {
     const errors = {}
@@ -230,12 +260,18 @@ const HotelDetails = () => {
               </select>
             </div>
 
+            {availability.checking && (
+              <p className="text-xs text-blue-600 text-center">Checking availability...</p>
+            )}
+            {!availability.checking && !availability.available && (
+              <p className="text-xs text-red-600 text-center">{availability.message}</p>
+            )}
             <button
               className="w-full bg-lime-600 text-white p-2 rounded hover:bg-lime-700 transition-colors duration-200 disabled:opacity-60"
               type="submit"
-              disabled={submitting}
+              disabled={submitting || (!availability.checking && !availability.available)}
             >
-              {submitting ? 'Booking...' : 'Book Now'}
+              {submitting ? 'Booking...' : !availability.available && !availability.checking ? 'Not Available' : 'Book Now'}
             </button>
           </form>
         </aside>

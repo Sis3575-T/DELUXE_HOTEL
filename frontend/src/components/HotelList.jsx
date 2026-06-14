@@ -3,6 +3,7 @@ import { RoomContext } from '../context/RoomContext'
 
 import { FaBath, FaUserFriends, FaWifi, FaBed } from 'react-icons/fa'
 import {Link} from 'react-router-dom'
+import { useSettings } from '../context/SettingsContext'
 
 const amenitiesList = [
   { label: '1-2 persons', icon: <FaUserFriends className='text-gray-600' />},
@@ -12,10 +13,12 @@ const amenitiesList = [
 ]
 const HotelList = () => {
   const { rooms, loading, error } = useContext(RoomContext)
+  const { settings } = useSettings()
+  const roomsSectionTitle = settings?.roomsSectionTitle || 'Book your stay and relax in luxury'
   return (
     <div id="rooms-section" className='bg-[#f7f0eb] py-16 px-4'>
       <div className='max-w-6xl mx-auto'>
-        <h2 className='text-4xl font-serif text-center mb-12 text-gray-800'>Book your stay and <br />relux in luxury</h2>
+        <h2 className='text-4xl font-serif text-center mb-12 text-gray-800'>{roomsSectionTitle}</h2>
         {loading && (
           <p className='text-gray-500 text-center col-span-full'>Loading rooms...</p>
         )}

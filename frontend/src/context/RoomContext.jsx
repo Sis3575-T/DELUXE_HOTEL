@@ -21,7 +21,6 @@ const RoomContextProvider = ({children})=>{
                 }
             } catch (err) {
                 console.log('Failed to fetch rooms from API, using local data', err)
-                setError('Could not connect to server. Showing sample rooms.')
                 setRooms(roomData)
             } finally {
                 setLoading(false)

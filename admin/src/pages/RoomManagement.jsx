@@ -28,6 +28,7 @@ const RoomManagement = ({ token }) => {
   const [capacity, setCapacity] = useState(2)
   const [available, setAvailable] = useState(true)
   const [image, setImage] = useState(null)
+  const [images, setImages] = useState([])
   const [errors, setErrors] = useState({})
 
   const getAuthHeaders = () => {
@@ -58,6 +59,7 @@ const RoomManagement = ({ token }) => {
     setCapacity(2)
     setAvailable(true)
     setImage(null)
+    setImages([])
     setErrors({})
     setShowModal(true)
   }
@@ -71,6 +73,7 @@ const RoomManagement = ({ token }) => {
     setCapacity(room.capacity || 2)
     setAvailable(room.available !== false)
     setImage(null)
+    setImages([])
     setErrors({})
     setShowModal(true)
   }
@@ -90,7 +93,14 @@ const RoomManagement = ({ token }) => {
     setSaveLoading(true)
     try {
       const fd = new FormData()
-      if (image) fd.append('image', image)
+      const allImages = image ? [image, ...images] : images
+      if (allImages.length > 0) {
+        allImages.forEach((file) => fd.append('images', file))
+      } else if (!editRoom) {
+        notify.error('At least one room image is required')
+        setSaveLoading(false)
+        return
+      }
       fd.append('name', name)
       fd.append('description', description)
       fd.append('price', price)
@@ -156,7 +166,7 @@ const RoomManagement = ({ token }) => {
           <h1 className="text-xl font-bold" style={{ color: '#1E293B', fontFamily: "'Playfair Display', serif" }}>Room Management</h1>
           <p className="text-sm mt-1" style={{ color: '#6B7280' }}>{rooms.length} rooms total</p>
         </div>
-        <Button variant="primary" icon={MdAdd} onClick={openAdd}>Add New Room</Button>
+        <Button variant="gold" icon={MdAdd} onClick={openAdd}>Add New Room</Button>
       </div>
 
       {/* Search bar */}
@@ -228,13 +238,27 @@ const RoomManagement = ({ token }) => {
                       <h3 className="font-semibold" style={{ color: '#1E293B' }}>{room.name}</h3>
                       <p className="text-xs mt-0.5" style={{ color: '#94A3B8' }}>Capacity: {room.capacity || 2} guests</p>
                     </div>
-                    <p className="font-bold text-lg" style={{ color: '#2563EB' }}>
-                      ${room.price}
+                    <p className="font-bold text-lg" style={{ color: '#D4AF37' }}>
+                      ETB {room.price}
                       <span className="text-xs font-normal" style={{ color: '#94A3B8' }}>/night</span>
                     </p>
                   </div>
+                  {room.images?.length > 1 && (
+                    <div className="flex gap-1 mb-3">
+                      {room.images.slice(0, 4).map((img, i) => (
+                        <div key={i} className="w-10 h-10 rounded overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                          <img src={img} alt="" className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                      {room.images.length > 4 && (
+                        <div className="w-10 h-10 rounded flex items-center justify-center text-xs font-bold" style={{ background: '#1E293B', color: '#D4AF37' }}>
+                          +{room.images.length - 4}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {room.description && (
-                    <p className="text-xs" style={{ color: '#6B7280', marginBottom: '16px', lineClamp: '2' }}>{room.description}</p>
+                    <p className="text-xs" style={{ color: '#6B7280', marginBottom: '16px' }}>{room.description}</p>
                   )}
                   <div className="flex" style={{ gap: '10px' }}>
                     <Button variant="primary" size="sm" icon={MdEdit} onClick={() => openEdit(room)} className="flex-1">Edit</Button>
@@ -270,28 +294,51 @@ const RoomManagement = ({ token }) => {
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editRoom ? 'Edit Room' : 'Add New Room'} width="max-w-lg">
         <form onSubmit={handleSubmit} className="flex flex-col" style={{ gap: '16px' }}>
           <div>
-            <label className="block text-xs font-semibold" style={{ color: '#6B7280', marginBottom: '6px' }}>Room Image</label>
+            <label className="block text-xs font-semibold mb-2" style={{ color: '#6B7280' }}>Room Images</label>
             <label
-              className="flex flex-col items-center justify-center cursor-pointer transition-all rounded"
-              style={{
-                height: '120px',
-                border: '2px dashed #E5E7EB',
-                background: '#F8FAFC',
-                borderRadius: '6px',
-              }}
+              className="flex flex-col items-center justify-center cursor-pointer transition-all rounded-lg mb-3"
+              style={{ height: '120px', border: '2px dashed var(--border)', background: 'var(--bg-subtle)' }}
             >
               {image ? (
-                <img src={URL.createObjectURL(image)} alt="preview" className="h-full w-full object-cover rounded" />
+                <img src={URL.createObjectURL(image)} alt="preview" className="h-full w-full object-cover rounded-lg" />
               ) : editRoom?.image ? (
-                <img src={editRoom.image} alt="current" className="h-full w-full object-cover rounded" />
+                <img src={editRoom.image} alt="current" className="h-full w-full object-cover rounded-lg" />
               ) : (
                 <div className="text-center">
-                  <MdCloudUpload size={24} style={{ color: '#94A3B8' }} className="mx-auto" />
-                  <p className="text-xs mt-1" style={{ color: '#94A3B8' }}>Click to upload image</p>
+                  <MdCloudUpload size={28} style={{ color: '#D4AF37' }} className="mx-auto" />
+                  <p className="text-xs mt-2 font-medium" style={{ color: 'var(--text-muted)' }}>Primary image (required)</p>
                 </div>
               )}
               <input type="file" accept="image/*" className="hidden" onChange={e => setImage(e.target.files?.[0] ?? null)} />
             </label>
+            <label
+              className="flex flex-col items-center justify-center cursor-pointer transition-all rounded-lg p-4"
+              style={{ border: '2px dashed var(--border)', background: 'var(--bg-subtle)' }}
+            >
+              <MdCloudUpload size={22} style={{ color: 'var(--text-muted)' }} />
+              <p className="text-xs mt-1 font-medium" style={{ color: 'var(--text-muted)' }}>Add additional images (optional)</p>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={e => setImages(Array.from(e.target.files || []))}
+              />
+            </label>
+            {(images.length > 0 || editRoom?.images?.length > 0) && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {images.map((file, i) => (
+                  <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                    <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover" />
+                  </div>
+                ))}
+                {!images.length && editRoom?.images?.map((url, i) => (
+                  <div key={i} className="w-16 h-16 rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -325,7 +372,7 @@ const RoomManagement = ({ token }) => {
           <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: '16px' }}>
             <div>
               <label className="block text-xs font-semibold" style={{ color: '#6B7280', marginBottom: '6px' }}>
-                Price/Night ($) <span style={{ color: '#DC2626' }}>*</span>
+                Price/Night (ETB) <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <input
                 type="number"

@@ -15,6 +15,15 @@ import Reviews from './pages/Reviews.jsx'
 import Messages from './pages/Messages.jsx'
 import Settings from './pages/Settings.jsx'
 import ActivityLog from './pages/ActivityLog.jsx'
+import StaffManagement from './pages/StaffManagement.jsx'
+import Roles from './pages/Roles.jsx'
+import Housekeeping from './pages/Housekeeping.jsx'
+import Maintenance from './pages/Maintenance.jsx'
+import Reports from './pages/Reports.jsx'
+import CalendarView from './pages/CalendarView.jsx'
+import CustomerHistory from './pages/CustomerHistory.jsx'
+import BackupRestore from './pages/BackupRestore.jsx'
+import Notifications from './pages/Notifications.jsx'
 
 export const backendUrl = 'http://localhost:4000'
 
@@ -79,9 +88,9 @@ const App = () => {
           <Topbar setToken={setToken} />
           <main
             className="transition-all duration-300 min-h-screen"
-            style={{ marginLeft: sidebarCollapsed ? 72 : 260, paddingTop: '72px' }}
+            style={{ marginLeft: sidebarCollapsed ? '72px' : '260px' }}
           >
-            <div className="p-4 md:p-6 lg:p-8">
+            <div className="p-4 md:p-6 lg:p-8" style={{ paddingTop: '72px' }}>
               <Routes>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<Dashboard />} />
@@ -93,6 +102,15 @@ const App = () => {
                 <Route path="/messages" element={<Messages />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/activity" element={<ActivityLog />} />
+                <Route path="/staff" element={<StaffManagement />} />
+                <Route path="/roles" element={<Roles />} />
+                <Route path="/housekeeping" element={<Housekeeping />} />
+                <Route path="/maintenance" element={<Maintenance />} />
+                <Route path="/reports" element={<Reports />} />
+                <Route path="/calendar" element={<CalendarView />} />
+                <Route path="/customer-history" element={<CustomerHistory />} />
+                <Route path="/backup" element={<BackupRestore />} />
+                <Route path="/notifications" element={<Notifications />} />
               </Routes>
             </div>
           </main>

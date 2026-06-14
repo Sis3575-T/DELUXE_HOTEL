@@ -20,20 +20,27 @@ const normalizeStatus = (s) => s === 'Confirmed' ? 'Approved' : s
 
 const statusBadge = (status) => {
   const normalized = normalizeStatus(status)
+  const display = normalized === 'Approved' ? 'Confirmed' : (status || 'Pending')
   const map = {
-    'Pending':     { bg: '#FEF3C7', color: '#D97706' },
-    'Approved':    { bg: '#DCFCE7', color: '#16A34A' },
-    'Rejected':    { bg: '#FEE2E2', color: '#DC2626' },
-    'Checked In':  { bg: '#DBEAFE', color: '#2563EB' },
-    'Checked Out': { bg: '#F3F4F6', color: '#6B7280' },
-    'Cancelled':   { bg: '#FEE2E2', color: '#DC2626' },
+    'Pending':     { bg: '#FEF3C7', color: '#D97706', cls: 'badge-pending' },
+    'Approved':    { bg: '#DCFCE7', color: '#16A34A', cls: 'badge-confirmed' },
+    'Rejected':    { bg: '#FEE2E2', color: '#DC2626', cls: 'badge-cancelled' },
+    'Checked In':  { bg: '#DBEAFE', color: '#2563EB', cls: 'badge-checked-in' },
+    'Checked Out': { bg: '#F1F5F9', color: '#64748B', cls: 'badge-checked-out' },
+    'Cancelled':   { bg: '#FEE2E2', color: '#DC2626', cls: 'badge-cancelled' },
   }
-  const s = map[normalized] || { bg: '#F3F4F6', color: '#6B7280' }
+  const s = map[normalized] || { bg: '#F3F4F6', color: '#6B7280', cls: '' }
   return (
-    <span className="px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap" style={{ background: s.bg, color: s.color }}>
-      {status || 'Pending'}
+    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${s.cls}`} style={{ background: s.bg, color: s.color }}>
+      {display}
     </span>
   )
+}
+
+const extractRoomNumber = (roomName) => {
+  if (!roomName) return '—'
+  const match = String(roomName).match(/\b(\d{2,4})\b/)
+  return match ? match[1] : roomName.split(' ').pop() || roomName
 }
 
 const formatDate = (d) => {
@@ -61,6 +68,7 @@ const AuditEntry = ({ label, data }) => {
 
 const Reservation = () => {
   const [reservations, setReservations] = useState([])
+  const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [filterStatus, setFilterStatus] = useState('All')
@@ -71,6 +79,7 @@ const Reservation = () => {
   const [actionLoading, setActionLoading] = useState(null)
   const [editLoading, setEditLoading] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [dateConflictMsg, setDateConflictMsg] = useState('')
 
   const [formName, setFormName] = useState('')
   const [formEmail, setFormEmail] = useState('')
@@ -91,8 +100,12 @@ const Reservation = () => {
     setLoading(true)
     setError(null)
     try {
-      const r = await axios.get(backendUrl + '/api/reservation/get')
-      setReservations(Array.isArray(r.data) ? r.data : [])
+      const [resRes, roomsRes] = await Promise.all([
+        axios.get(backendUrl + '/api/reservation/get'),
+        axios.get(backendUrl + '/api/hotel/list').catch(() => ({ data: { hotels: [] } })),
+      ])
+      setReservations(Array.isArray(resRes.data) ? resRes.data : [])
+      setRooms(roomsRes.data?.hotels || [])
     } catch {
       setError('Failed to load reservations')
       setReservations([])
@@ -167,8 +180,18 @@ const Reservation = () => {
 
   const handleEdit = async () => {
     if (!validateEdit() || !selected) return
+    setDateConflictMsg('')
     setEditLoading(true)
     try {
+      const roomId = selected.roomId || rooms.find(r => r.name === formRoom)?._id || ''
+      const checkRes = await axios.get(`${backendUrl}/api/reservation/check-availability`, {
+        params: { roomId, checkin: formCheckin, checkout: formCheckout }
+      })
+      if (checkRes.data?.success && !checkRes.data.available) {
+        setDateConflictMsg('This room is already booked for the selected dates.')
+        setEditLoading(false)
+        return
+      }
       const res = await axios.put(`${backendUrl}/api/reservation/update/${selected._id}`, {
         name: formName, email: formEmail, phone: formPhone,
         roomName: formRoom, checkin: formCheckin, checkout: formCheckout,
@@ -314,59 +337,83 @@ const Reservation = () => {
     }
   }
 
+  const roomLookup = useMemo(() => {
+    const map = {}
+    rooms.forEach(r => { map[(r.name || '').toLowerCase()] = r })
+    return map
+  }, [rooms])
+
+  const getRoomInfo = (roomName) => {
+    const room = roomLookup[(roomName || '').toLowerCase()]
+    return {
+      number: extractRoomNumber(roomName),
+      type: room?.roomType || 'Standard',
+    }
+  }
+
   const columns = [
     {
       header: 'Booking ID',
       accessor: '_id',
       sortable: true,
-      width: 100,
+      width: 110,
       render: (r) => (
-        <span className="font-mono text-xs font-semibold" style={{ color: '#2563EB' }}>
+        <span className="font-mono text-xs font-semibold" style={{ color: '#D4AF37' }}>
           #{String(r._id).slice(-6).toUpperCase()}
         </span>
       ),
     },
     {
-      header: 'Customer',
+      header: 'Guest Name',
       accessor: 'name',
       sortable: true,
       render: (r) => (
-        <div>
-          <p className="font-medium text-sm" style={{ color: '#1E293B' }}>{r.name}</p>
-          <p className="text-xs" style={{ color: '#6B7280' }}>{r.email}</p>
-        </div>
+        <span className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>{r.name}</span>
       ),
     },
-    { header: 'Room', accessor: 'roomName', sortable: true },
+    {
+      header: 'Room Number',
+      render: (r) => (
+        <span className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{getRoomInfo(r.roomName).number}</span>
+      ),
+    },
+    {
+      header: 'Room Type',
+      render: (r) => (
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: 'rgba(30,41,59,0.08)', color: '#1E293B' }}>
+          {getRoomInfo(r.roomName).type}
+        </span>
+      ),
+    },
     { header: 'Check-in', accessor: 'checkin', sortable: true },
     { header: 'Check-out', accessor: 'checkout', sortable: true },
     { header: 'Guests', accessor: 'guests', sortable: true },
     { header: 'Status', accessor: 'status', sortable: true, render: (r) => statusBadge(r.status || 'Pending') },
     {
       header: 'Actions',
-      width: 240,
+      width: 280,
       render: (r) => (
-        <div className="flex items-center" style={{ gap: '8px', whiteSpace: 'nowrap' }}>
-          {actionButtons(r)}
+        <div className="flex items-center" style={{ gap: '6px', whiteSpace: 'nowrap' }}>
           <button
             onClick={(e) => { e.stopPropagation(); setSelected(r); setViewModal(true) }}
-            className="w-9 h-9 rounded flex items-center justify-center transition-all hover:opacity-80"
-            style={{ background: '#EEF2FF', color: '#6366F1' }}
+            className="w-9 h-9 rounded-lg flex items-center justify-center transition-all hover:scale-105"
+            style={{ background: 'rgba(212,175,55,0.12)', color: '#B8960C' }}
             title="View"
           >
             <MdVisibility size={18} />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); openEdit(r) }}
-            className="w-9 h-9 rounded flex items-center justify-center transition-all hover:opacity-80"
-            style={{ background: '#EFF6FF', color: '#2563EB' }}
+            className="w-9 h-9 rounded-lg flex items-center justify-center transition-all hover:scale-105"
+            style={{ background: 'rgba(30,41,59,0.08)', color: '#1E293B' }}
             title="Edit"
           >
             <MdEdit size={18} />
           </button>
+          {actionButtons(r)}
           <button
             onClick={(e) => { e.stopPropagation(); setDeleteTarget(r) }}
-            className="w-9 h-9 rounded flex items-center justify-center transition-all hover:opacity-80"
+            className="w-9 h-9 rounded-lg flex items-center justify-center transition-all hover:scale-105"
             style={{ background: '#FEF2F2', color: '#DC2626' }}
             title="Delete"
           >
@@ -378,31 +425,26 @@ const Reservation = () => {
   ]
 
   return (
-    <div className="fade-in-up" style={{ marginBottom: '32px' }}>
-      <div className="flex flex-wrap items-start justify-between" style={{ gap: '16px', marginBottom: '32px' }}>
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: '#1E293B', fontFamily: "'Playfair Display', serif" }}>Reservations</h1>
-          <p className="text-sm mt-1" style={{ color: '#6B7280' }}>{filtered.length} total reservations</p>
+    <div className="fade-in-up page-section">
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div className="page-header mb-0">
+          <h1>Reservations</h1>
+          <p>{filtered.length} total reservations</p>
         </div>
-        <div className="flex items-center flex-wrap" style={{ gap: '10px' }}>
+        <div className="flex items-center flex-wrap gap-2">
           <Button variant="outline" size="sm" icon={MdDownload} onClick={exportExcel}>Export Excel</Button>
           <Button variant="outline" size="sm" icon={MdDownload} onClick={exportPDF}>Export PDF</Button>
         </div>
       </div>
 
-      <div className="flex flex-wrap" style={{ gap: '8px', marginBottom: '32px' }}>
+      <div className="flex flex-wrap gap-2 mb-6">
         {STATUSES.map(s => (
           <button
             key={s}
             onClick={() => setFilterStatus(s)}
-            className="px-4 py-2 rounded text-xs font-medium transition-all"
-            style={{
-              background: filterStatus === s ? '#2563EB' : '#FFFFFF',
-              color: filterStatus === s ? '#fff' : '#6B7280',
-              border: `1.5px solid ${filterStatus === s ? '#2563EB' : '#E5E7EB'}`,
-            }}
+            className={`filter-pill ${filterStatus === s ? 'active' : ''}`}
           >
-            {s}
+            {s === 'Approved' ? 'Confirmed' : s}
           </button>
         ))}
       </div>
@@ -511,6 +553,9 @@ const Reservation = () => {
               {errors.guests && <p className="text-xs mt-1" style={{ color: '#DC2626' }}>{errors.guests}</p>}
             </div>
           </div>
+          {dateConflictMsg && (
+            <p className="text-xs" style={{ color: '#DC2626', textAlign: 'center' }}>{dateConflictMsg}</p>
+          )}
           <div className="flex" style={{ gap: '10px', paddingTop: '8px' }}>
             <Button variant="secondary" onClick={() => setEditModal(false)} className="flex-1">Cancel</Button>
             <Button variant="success" icon={MdCheck} loading={editLoading} onClick={handleEdit} className="flex-1">Save Changes</Button>

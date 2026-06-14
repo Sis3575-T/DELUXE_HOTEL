@@ -1,6 +1,41 @@
 import Reservation from '../models/reservationModels.js'
+import hotelModel from '../models/hotelModels.js'
 import { logActivity } from './activityControllers.js'
 import { createNotification } from './notificationControllers.js'
+
+const ACTIVE_STATUSES = ['Pending', 'Approved', 'Checked In']
+
+const getOverlappingReservations = async (roomId, checkin, checkout, excludeId = null) => {
+  if (!roomId || !checkin || !checkout) return []
+  const query = {
+    roomId: String(roomId),
+    status: { $in: ACTIVE_STATUSES },
+    checkin: { $lt: checkout },
+    checkout: { $gt: checkin },
+  }
+  if (excludeId) query._id = { $ne: excludeId }
+  return await Reservation.find(query)
+}
+
+const syncRoomStatus = async (roomId) => {
+  if (!roomId) return
+  try {
+    const activeCount = await Reservation.countDocuments({
+      roomId: String(roomId),
+      status: { $in: ACTIVE_STATUSES },
+    })
+    const hotel = await hotelModel.findById(roomId)
+    if (hotel) {
+      const shouldBeOccupied = activeCount > 0
+      if (hotel.available === shouldBeOccupied) {
+        hotel.available = !shouldBeOccupied
+        await hotel.save()
+      }
+    }
+  } catch (error) {
+    console.error('syncRoomStatus error:', error?.message || error)
+  }
+}
 
 const getAdminInfo = (req) => {
   if (req.admin) {
@@ -29,6 +64,12 @@ const createReservation = async (req, res) => {
     if (!name || !email || !checkin || !checkout || !guests || !roomName) {
       return res.json({ success: false, message: 'All fields are required' })
     }
+
+    const overlapping = await getOverlappingReservations(roomId, checkin, checkout)
+    if (overlapping.length > 0) {
+      return res.json({ success: false, message: 'This room is already booked for the selected dates. Please choose different dates or another room.' })
+    }
+
     const clientInfo = getClientInfo(req.body)
     const newReservation = new Reservation({
       name, email, phone, checkin, checkout, guests, roomName, roomId,
@@ -94,6 +135,7 @@ const approveReservation = async (req, res) => {
     existing.status = 'Approved'
     existing.approvedBy = adminInfo
     await existing.save()
+    await syncRoomStatus(existing.roomId)
 
     logActivity({
       action: 'Reservation Approved',
@@ -130,6 +172,7 @@ const rejectReservation = async (req, res) => {
     existing.status = 'Rejected'
     existing.rejectedBy = adminInfo
     await existing.save()
+    await syncRoomStatus(existing.roomId)
 
     logActivity({
       action: 'Reservation Rejected',
@@ -166,6 +209,7 @@ const checkinReservation = async (req, res) => {
     existing.status = 'Checked In'
     existing.checkedInBy = adminInfo
     await existing.save()
+    await syncRoomStatus(existing.roomId)
 
     logActivity({
       action: 'Guest Checked In',
@@ -202,6 +246,7 @@ const checkoutReservation = async (req, res) => {
     existing.status = 'Checked Out'
     existing.checkedOutBy = adminInfo
     await existing.save()
+    await syncRoomStatus(existing.roomId)
 
     logActivity({
       action: 'Guest Checked Out',
@@ -238,6 +283,7 @@ const cancelReservation = async (req, res) => {
     existing.status = 'Cancelled'
     existing.cancelledBy = adminInfo
     await existing.save()
+    await syncRoomStatus(existing.roomId)
 
     logActivity({
       action: 'Reservation Cancelled',
@@ -278,6 +324,7 @@ const clientCancelReservation = async (req, res) => {
     existing.status = 'Cancelled'
     existing.cancelledBy = clientInfo
     await existing.save()
+    await syncRoomStatus(existing.roomId)
 
     logActivity({
       action: 'Reservation Cancelled',
@@ -312,9 +359,19 @@ const updateReservation = async (req, res) => {
     if (req.body.email !== undefined) updateData.email = req.body.email
     if (req.body.phone !== undefined) updateData.phone = req.body.phone
     if (req.body.roomName !== undefined) updateData.roomName = req.body.roomName
+    if (req.body.roomId !== undefined) updateData.roomId = req.body.roomId
     if (req.body.checkin !== undefined) updateData.checkin = req.body.checkin
     if (req.body.checkout !== undefined) updateData.checkout = req.body.checkout
     if (req.body.guests !== undefined) updateData.guests = Number(req.body.guests)
+
+    const newCheckin = req.body.checkin || existing.checkin
+    const newCheckout = req.body.checkout || existing.checkout
+    const newRoomId = req.body.roomId || existing.roomId
+
+    const overlapping = await getOverlappingReservations(newRoomId, newCheckin, newCheckout, id)
+    if (overlapping.length > 0) {
+      return res.json({ success: false, message: 'This room is already booked for the selected dates. Please choose different dates or another room.' })
+    }
 
     const adminInfo = getAdminInfo(req)
     if (adminInfo) {
@@ -341,11 +398,29 @@ const updateReservation = async (req, res) => {
 const deleteReservation = async (req, res) => {
   try {
     const { id } = req.params
-    await Reservation.findByIdAndDelete(id)
+    const reservation = await Reservation.findById(id)
+    if (reservation) {
+      await Reservation.findByIdAndDelete(id)
+      await syncRoomStatus(reservation.roomId)
+    }
     res.json({ success: true, message: 'reservation deleted successfully' })
   } catch (error) {
     console.log(error)
     res.json({ success: false, message: 'error deleting reservation' })
+  }
+}
+
+const checkAvailability = async (req, res) => {
+  try {
+    const { roomId, checkin, checkout } = req.query
+    if (!roomId || !checkin || !checkout) {
+      return res.json({ success: false, message: 'roomId, checkin, and checkout are required' })
+    }
+    const overlapping = await getOverlappingReservations(roomId, checkin, checkout)
+    res.json({ success: true, available: overlapping.length === 0 })
+  } catch (error) {
+    console.error('checkAvailability error:', error?.message || error)
+    res.json({ success: false, message: 'Error checking availability' })
   }
 }
 
@@ -361,4 +436,6 @@ export {
   clientCancelReservation,
   updateReservation,
   deleteReservation,
+  checkAvailability,
+  getOverlappingReservations,
 }

@@ -1,5 +1,6 @@
 import React from 'react'
 import { FaShuttleVan, FaParking, FaCocktail, FaWater, FaUtensils, FaSwimmingPool, FaHotTub, FaConciergeBell } from 'react-icons/fa'
+import { useSettings } from '../context/SettingsContext'
 
 const services = [
   {
@@ -44,12 +45,15 @@ const services = [
   }
 ]
 const Facility = () => {
+  const { settings } = useSettings()
+  const facilityTitle = settings?.facilityTitle || 'Facilities & Services'
+  const facilitySubtitle = settings?.facilitySubtitle || 'Services'
   return (
     <div className='bg-[#f8f0eb] py-16 px-4 md:px-20'>
       <div className='mx-auto max-w-7xl'>
         <div className='mb-12'>
-          <p className='text-sm tracking-widest uppercase text-gray-500'>Services</p>
-          <h2 className='text-4xl font-serif font-semibold text-gray-800'>Facilities & Services</h2>
+          <p className='text-sm tracking-widest uppercase text-gray-500'>{facilitySubtitle}</p>
+          <h2 className='text-4xl font-serif font-semibold text-gray-800'>{facilityTitle}</h2>
         </div>
         <div className='grid md:grid-cols-3 sm-grid-cols-2 gap-10'>
           {services.map((service, index) => (

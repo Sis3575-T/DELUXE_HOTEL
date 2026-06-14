@@ -91,4 +91,25 @@ const deleteMessage = async (req, res) => {
   }
 }
 
-export { createMessage, getAllMessages, getMessageById, updateMessage, deleteMessage }
+const replyMessage = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { reply } = req.body
+    if (!reply?.trim()) {
+      return res.status(400).json({ success: false, message: 'Reply content is required' })
+    }
+    const updated = await Message.findByIdAndUpdate(id, {
+      reply: reply.trim(),
+      repliedAt: new Date().toISOString().split('T')[0],
+    }, { new: true })
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Message not found' })
+    }
+    res.json({ success: true, message: 'Reply sent successfully', msg: updated })
+  } catch (error) {
+    console.error('replyMessage error:', error?.message || error)
+    res.status(500).json({ success: false, message: 'Error sending reply' })
+  }
+}
+
+export { createMessage, getAllMessages, getMessageById, updateMessage, deleteMessage, replyMessage }

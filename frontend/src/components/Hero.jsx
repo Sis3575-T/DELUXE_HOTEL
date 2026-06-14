@@ -1,7 +1,12 @@
 import React from 'react'
 import bgImage from '../assets/hero2.jpg'
+import { useSettings } from '../context/SettingsContext'
 
 const Hero = () => {
+  const { settings } = useSettings()
+  const hotelName = settings?.hotelName || 'DELUXE HOTELS'
+  const tagline = settings?.tagline || settings?.description?.split('.')[0] || 'Where Luxury Meets Comfort'
+  const heroButtonText = settings?.heroButtonText || 'BOOK YOUR STAY'
   const scrollToRooms = () => {
     const el = document.getElementById('rooms-section')
     if (el) el.scrollIntoView({ behavior: 'smooth' })
@@ -12,9 +17,9 @@ const Hero = () => {
       
       </div>
       <div className='relative z-20 flex flex-col items-center justify-center h-full text-center text-white px-4'>
-       <h2 className='text-lg tracking-widest uppercase'>Where LUxury Meets Dinner</h2> 
-       <h1 className='text-4xl font-bold mb-6'>DELIXE HOTELS</h1>
-       <button onClick={scrollToRooms} className='bg-lime-500 text-black font-bold py-3 px-6 rounded-lg hover:bg-lime-600 transition'>BOOK YOUR STAY</button>
+       <h2 className='text-lg tracking-widest uppercase'>{tagline}</h2> 
+       <h1 className='text-4xl font-bold mb-6'>{hotelName}</h1>
+       <button onClick={scrollToRooms} className='bg-lime-500 text-black font-bold py-3 px-6 rounded-lg hover:bg-lime-600 transition'>{heroButtonText}</button>
       </div>
     </div>
     

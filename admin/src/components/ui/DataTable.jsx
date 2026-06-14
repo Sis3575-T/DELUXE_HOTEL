@@ -64,11 +64,11 @@ const DataTable = ({
 
   return (
     <div
-      className="overflow-hidden"
-      style={{ border: '1px solid #E5E7EB', borderRadius: '8px', background: '#FFFFFF' }}
+      className="overflow-hidden rounded-xl"
+      style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}
     >
       {searchable && (
-        <div className="px-5 py-4 border-b" style={{ borderColor: '#E5E7EB' }}>
+        <div className="px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
           <div className="relative max-w-xs">
             <MdSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#94A3B8' }} />
             <input
@@ -84,7 +84,7 @@ const DataTable = ({
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full data-table" style={{ background: '#FFFFFF' }}>
+        <table className="w-full data-table" style={{ background: 'var(--bg-card)' }}>
           <thead>
             <tr>
               {columns.map((col, i) => (
@@ -156,7 +156,7 @@ const DataTable = ({
       {totalPages > 1 && (
         <div
           className="flex items-center justify-between px-5 py-4 border-t"
-          style={{ borderColor: '#E5E7EB', background: '#FFFFFF' }}
+          style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}
         >
           <p className="text-xs" style={{ color: '#94A3B8' }}>
             {sorted.length} results
@@ -176,9 +176,9 @@ const DataTable = ({
                 onClick={() => setPage(i + 1)}
                 className="w-7 h-7 rounded text-xs font-medium transition-all"
                 style={{
-                  background: page === i + 1 ? '#2563EB' : 'transparent',
-                  color: page === i + 1 ? '#fff' : '#6B7280',
-                  border: `1px solid ${page === i + 1 ? '#2563EB' : '#E5E7EB'}`,
+                  background: page === i + 1 ? '#1E293B' : 'transparent',
+                  color: page === i + 1 ? '#D4AF37' : 'var(--text-secondary)',
+                  border: `1px solid ${page === i + 1 ? '#1E293B' : 'var(--border)'}`,
                 }}
               >
                 {i + 1}

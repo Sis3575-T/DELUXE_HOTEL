@@ -2,8 +2,8 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import axios from 'axios'
 import { backendUrl } from '../App'
 import {
-  MdSearch, MdEmail, MdMarkEmailRead, MdDelete,
-  MdPerson, MdPhone, MdChevronLeft, MdChevronRight, MdRefresh
+  MdSearch, MdEmail, MdMarkEmailRead, MdDelete, MdReply,
+  MdPerson, MdPhone, MdChevronLeft, MdChevronRight, MdRefresh, MdClose
 } from 'react-icons/md'
 import Button from '../components/ui/Button'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
@@ -21,6 +21,9 @@ const Messages = () => {
   const [selected, setSelected] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [replyTarget, setReplyTarget] = useState(null)
+  const [replyText, setReplyText] = useState('')
+  const [replyLoading, setReplyLoading] = useState(false)
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('adminToken')
@@ -253,11 +256,17 @@ const Messages = () => {
                       </div>
                     </div>
                   </div>
-                  <div className="p-4 rounded" style={{ background: '#F8FAFC', border: '1px solid #E5E7EB' }}>
-                    <p className="text-sm leading-relaxed" style={{ color: '#6B7280' }}>{selected.message}</p>
-                  </div>
-                  <div className="flex gap-2 mt-4">
-                    <Button variant="primary" size="sm" className="flex-1" onClick={() => window.location.href = `mailto:${selected.email}`}>Reply</Button>
+                    <div className="p-4 rounded" style={{ background: '#F8FAFC', border: '1px solid #E5E7EB' }}>
+                      <p className="text-sm leading-relaxed" style={{ color: '#6B7280' }}>{selected.message}</p>
+                    </div>
+                    {selected.reply && (
+                      <div className="p-4 rounded mt-3" style={{ background: '#EBF5FF', border: '1px solid #BFDBFE' }}>
+                        <p className="text-xs font-semibold mb-1" style={{ color: '#1D4ED8' }}>Your Reply {selected.repliedAt ? `(${selected.repliedAt})` : ''}</p>
+                        <p className="text-sm leading-relaxed" style={{ color: '#1E40AF' }}>{selected.reply}</p>
+                      </div>
+                    )}
+                    <div className="flex gap-2 mt-4">
+                    <Button variant="primary" size="sm" className="flex-1" onClick={() => { setReplyText(''); setReplyTarget(selected) }}>Reply</Button>
                     <Button variant="danger" size="sm" className="flex-1" onClick={() => setDeleteTarget(selected)}>Delete</Button>
                   </div>
                 </div>
@@ -283,6 +292,54 @@ const Messages = () => {
         variant="danger"
         loading={deleteLoading}
       />
+
+      {replyTarget && (
+        <div className="modal-overlay" onClick={() => setReplyTarget(null)}>
+          <div className="w-full max-w-lg p-6 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB' }}
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-base" style={{ color: '#1E293B' }}>Reply to {replyTarget.name}</h3>
+              <button onClick={() => setReplyTarget(null)} className="p-1 rounded transition-all hover:bg-gray-100" style={{ color: '#94A3B8' }}>
+                <MdClose size={20} />
+              </button>
+            </div>
+            <div className="mb-4 p-3 rounded" style={{ background: '#F8FAFC', border: '1px solid #E5E7EB' }}>
+              <p className="text-xs font-medium mb-1" style={{ color: '#6B7280' }}>Original message:</p>
+              <p className="text-sm" style={{ color: '#1E293B' }}>"{replyTarget.message}"</p>
+            </div>
+            <div className="mb-4">
+              <label className="block text-xs font-semibold mb-1" style={{ color: '#6B7280' }}>Your Reply</label>
+              <textarea className="input-field" rows={5} value={replyText} onChange={e => setReplyText(e.target.value)}
+                placeholder="Type your reply here..." style={{ resize: 'vertical' }} />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="secondary" size="sm" onClick={() => setReplyTarget(null)}>Cancel</Button>
+              <Button variant="primary" size="sm" loading={replyLoading} onClick={async () => {
+                if (!replyText.trim()) return
+                setReplyLoading(true)
+                try {
+                  const r = await axios.put(backendUrl + `/api/message/reply/${replyTarget._id}`,
+                    { reply: replyText.trim() },
+                    { headers: getAuthHeaders() }
+                  )
+                  if (r.data?.success) {
+                    notify.success('Reply sent successfully')
+                    setReplyTarget(null)
+                    setReplyText('')
+                    await fetchMessages()
+                  } else {
+                    notify.error(r.data?.message || 'Reply failed')
+                  }
+                } catch (err) {
+                  notify.error(err.response?.data?.message || err.message || 'Error sending reply')
+                } finally {
+                  setReplyLoading(false)
+                }
+              }}>Send Reply</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

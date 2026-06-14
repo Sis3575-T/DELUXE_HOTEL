@@ -15,6 +15,7 @@ import autoTable from 'jspdf-autotable'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+import StatCard from '../components/ui/StatCard'
 import notify from '../components/ui/Toast'
 
 const REVENUE_TYPES = ['Room Booking', 'Food & Beverage', 'Event', 'Spa', 'Other']
@@ -92,24 +93,30 @@ const Revenue = () => {
   // Dashboard calculations from real data
   const dashboard = useMemo(() => {
     const now = new Date()
+    const todayStr = now.toISOString().split('T')[0]
+    const weekStart = new Date(now)
+    weekStart.setDate(now.getDate() - now.getDay())
+    const weekStartStr = weekStart.toISOString().split('T')[0]
+
     const currentMonth = now.getMonth()
     const currentYear = now.getFullYear()
     const currentMonthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`
 
-    const total = revenues.reduce((s, r) => s + (r.status === 'Completed' ? r.amount : 0), 0)
-    const monthly = revenues.filter(r =>
-      r.date && r.date.startsWith(currentMonthStr) && r.status === 'Completed'
-    ).reduce((s, r) => s + r.amount, 0)
-    const yearly = revenues.filter(r =>
-      r.date && r.date.startsWith(String(currentYear)) && r.status === 'Completed'
+    const completed = revenues.filter(r => r.status === 'Completed')
+
+    const total = completed.reduce((s, r) => s + r.amount, 0)
+    const daily = completed.filter(r => r.date === todayStr).reduce((s, r) => s + r.amount, 0)
+    const weekly = completed.filter(r => r.date >= weekStartStr).reduce((s, r) => s + r.amount, 0)
+    const monthly = completed.filter(r =>
+      r.date && r.date.startsWith(currentMonthStr)
     ).reduce((s, r) => s + r.amount, 0)
     const pending = revenues.filter(r => r.status === 'Pending').reduce((s, r) => s + r.amount, 0)
     const refunds = revenues.filter(r => r.status === 'Refunded').reduce((s, r) => s + Math.abs(r.amount), 0)
-    const roomRevenue = revenues.filter(r => r.revenueType === 'Room Booking' && r.status === 'Completed').reduce((s, r) => s + r.amount, 0)
-    const foodRevenue = revenues.filter(r => r.revenueType === 'Food & Beverage' && r.status === 'Completed').reduce((s, r) => s + r.amount, 0)
-    const eventRevenue = revenues.filter(r => r.revenueType === 'Event' && r.status === 'Completed').reduce((s, r) => s + r.amount, 0)
+    const roomRevenue = completed.filter(r => r.revenueType === 'Room Booking').reduce((s, r) => s + r.amount, 0)
+    const foodRevenue = completed.filter(r => r.revenueType === 'Food & Beverage').reduce((s, r) => s + r.amount, 0)
+    const eventRevenue = completed.filter(r => r.revenueType === 'Event').reduce((s, r) => s + r.amount, 0)
 
-    return { total, monthly, yearly, pending, refunds, roomRevenue, foodRevenue, eventRevenue }
+    return { total, daily, weekly, monthly, pending, refunds, roomRevenue, foodRevenue, eventRevenue }
   }, [revenues])
 
   // Chart data grouped by month
@@ -506,67 +513,27 @@ const Revenue = () => {
         </div>
       </div>
 
-      {/* Dashboard Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" style={{ gap: '16px', marginBottom: '32px' }}>
-        <div className="p-5" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded flex items-center justify-center" style={{ background: '#EFF6FF' }}>
-              <MdAttachMoney size={20} style={{ color: '#2563EB' }} />
-            </div>
-            <div>
-              <p className="text-2xl font-bold" style={{ color: '#1E293B' }}>${(dashboard.total / 1000).toFixed(1)}K</p>
-              <p className="text-xs" style={{ color: '#6B7280' }}>Total Revenue</p>
-            </div>
-          </div>
-        </div>
-        <div className="p-5" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded flex items-center justify-center" style={{ background: '#F0FDF4' }}>
-              <MdAttachMoney size={20} style={{ color: '#16A34A' }} />
-            </div>
-            <div>
-              <p className="text-2xl font-bold" style={{ color: '#1E293B' }}>${dashboard.monthly.toLocaleString()}</p>
-              <p className="text-xs" style={{ color: '#6B7280' }}>Monthly Revenue</p>
-            </div>
-          </div>
-        </div>
-        <div className="p-5" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded flex items-center justify-center" style={{ background: '#FEF3C7' }}>
-              <MdAttachMoney size={20} style={{ color: '#D97706' }} />
-            </div>
-            <div>
-              <p className="text-2xl font-bold" style={{ color: '#1E293B' }}>${dashboard.pending.toLocaleString()}</p>
-              <p className="text-xs" style={{ color: '#6B7280' }}>Pending Revenue</p>
-            </div>
-          </div>
-        </div>
-        <div className="p-5" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded flex items-center justify-center" style={{ background: '#FEF2F2' }}>
-              <MdAttachMoney size={20} style={{ color: '#DC2626' }} />
-            </div>
-            <div>
-              <p className="text-2xl font-bold" style={{ color: '#1E293B' }}>${dashboard.refunds.toLocaleString()}</p>
-              <p className="text-xs" style={{ color: '#6B7280' }}>Refunds</p>
-            </div>
-          </div>
-        </div>
+      {/* Revenue Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <StatCard label="Daily Revenue" value={`ETB ${dashboard.daily.toLocaleString()}`} change="today" up={dashboard.daily > 0} icon={MdAttachMoney} color="#16A34A" />
+        <StatCard label="Weekly Revenue" value={`ETB ${dashboard.weekly.toLocaleString()}`} change="this week" up={dashboard.weekly > 0} icon={MdAttachMoney} color="#2563EB" />
+        <StatCard label="Monthly Revenue" value={`ETB ${dashboard.monthly.toLocaleString()}`} change="this month" up={dashboard.monthly > 0} icon={MdAttachMoney} color="#D4AF37" accent="#1E293B" />
+        <StatCard label="Total Revenue" value={`ETB ${dashboard.total.toLocaleString()}`} change="all time" up={true} icon={MdAttachMoney} color="#1E293B" accent="#D4AF37" />
       </div>
 
       {/* Revenue Breakdown */}
       <div className="grid grid-cols-1 sm:grid-cols-3" style={{ gap: '16px', marginBottom: '32px' }}>
         <div className="p-4" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
           <p className="text-xs font-medium" style={{ color: '#6B7280', marginBottom: '4px' }}>Room Bookings</p>
-          <p className="text-xl font-bold" style={{ color: '#2563EB' }}>${dashboard.roomRevenue.toLocaleString()}</p>
+          <p className="text-xl font-bold" style={{ color: '#D4AF37' }}>ETB {dashboard.roomRevenue.toLocaleString()}</p>
         </div>
         <div className="p-4" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
           <p className="text-xs font-medium" style={{ color: '#6B7280', marginBottom: '4px' }}>Food & Beverage</p>
-          <p className="text-xl font-bold" style={{ color: '#16A34A' }}>${dashboard.foodRevenue.toLocaleString()}</p>
+          <p className="text-xl font-bold" style={{ color: '#16A34A' }}>ETB {dashboard.foodRevenue.toLocaleString()}</p>
         </div>
         <div className="p-4" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
           <p className="text-xs font-medium" style={{ color: '#6B7280', marginBottom: '4px' }}>Events</p>
-          <p className="text-xl font-bold" style={{ color: '#D97706' }}>${dashboard.eventRevenue.toLocaleString()}</p>
+          <p className="text-xl font-bold" style={{ color: '#D97706' }}>ETB {dashboard.eventRevenue.toLocaleString()}</p>
         </div>
       </div>
 
@@ -582,7 +549,7 @@ const Revenue = () => {
             <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={v => `$${v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v}`} />
             <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="revenue" name="Revenue" fill="#2563EB" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="revenue" name="Revenue" fill="#D4AF37" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

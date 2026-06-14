@@ -3,20 +3,19 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   MdDashboard, MdHotel, MdEventNote, MdPeople, MdAttachMoney,
   MdStar, MdMessage, MdSettings, MdLogout, MdMenu, MdClose,
-  MdChevronLeft, MdHistory
+  MdChevronLeft
 } from 'react-icons/md'
 import { useTheme, useSettings } from '../App'
 
 const navItems = [
-  { to: '/dashboard', icon: MdDashboard, label: 'Dashboard' },
-  { to: '/rooms',     icon: MdHotel,     label: 'Room Management' },
-  { to: '/reservation', icon: MdEventNote, label: 'Reservations' },
-  { to: '/guests',    icon: MdPeople,    label: 'Guests' },
-  { to: '/revenue',   icon: MdAttachMoney, label: 'Revenue' },
-  { to: '/reviews',   icon: MdStar,      label: 'Reviews' },
-  { to: '/messages',  icon: MdMessage,   label: 'Messages' },
-  { to: '/activity',  icon: MdHistory,   label: 'Activity Log' },
-  { to: '/settings',  icon: MdSettings,  label: 'Settings' },
+  { to: '/dashboard',   icon: MdDashboard,   label: 'Dashboard' },
+  { to: '/rooms',       icon: MdHotel,       label: 'Room Management' },
+  { to: '/reservation', icon: MdEventNote,   label: 'Reservations' },
+  { to: '/guests',      icon: MdPeople,      label: 'Guests' },
+  { to: '/revenue',     icon: MdAttachMoney, label: 'Revenue' },
+  { to: '/reviews',     icon: MdStar,        label: 'Reviews' },
+  { to: '/messages',    icon: MdMessage,     label: 'Messages' },
+  { to: '/settings',    icon: MdSettings,    label: 'Settings' },
 ]
 
 const Sidebar = ({ setToken }) => {
@@ -38,17 +37,18 @@ const Sidebar = ({ setToken }) => {
   return (
     <>
       <button
-        className="fixed top-4 left-4 z-[10001] md:hidden p-2 rounded"
+        className="fixed top-4 left-4 z-[10001] md:hidden p-2.5 rounded-lg shadow-lg transition-all"
         style={{ background: '#1E293B' }}
         onClick={() => setMobileOpen(!mobileOpen)}
+        aria-label="Toggle menu"
       >
-        {mobileOpen ? <MdClose size={22} color="#fff" /> : <MdMenu size={22} color="#fff" />}
+        {mobileOpen ? <MdClose size={22} color="#D4AF37" /> : <MdMenu size={22} color="#D4AF37" />}
       </button>
 
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-[10000] md:hidden"
-          style={{ background: 'rgba(0,0,0,0.5)' }}
+          className="fixed inset-0 z-[10000] md:hidden backdrop-blur-sm"
+          style={{ background: 'rgba(15, 23, 42, 0.6)' }}
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -57,72 +57,81 @@ const Sidebar = ({ setToken }) => {
         className={`fixed left-0 top-0 h-full z-50 flex flex-col transition-all duration-300 ${
           collapsed ? 'w-[72px]' : 'w-[260px]'
         } ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
-        style={{ background: '#0F172A', borderRight: '1px solid rgba(255,255,255,0.08)' }}
+        style={{
+          background: 'linear-gradient(180deg, #0F172A 0%, #1E293B 100%)',
+          borderRight: '1px solid rgba(212, 175, 55, 0.12)',
+          boxShadow: '4px 0 24px rgba(0,0,0,0.15)',
+        }}
       >
-        {/* Logo section */}
-        <div className="flex items-center justify-between px-5 py-5 border-b flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)', minHeight: 80 }}>
+        {/* Logo */}
+        <div
+          className="flex items-center justify-between px-5 py-5 border-b flex-shrink-0"
+          style={{ borderColor: 'rgba(212, 175, 55, 0.15)', minHeight: 80 }}
+        >
           {!collapsed ? (
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded flex items-center justify-center font-bold text-lg"
-                style={{ background: '#D4AF37', color: '#0F172A' }}>
-                {shortName}
+              <div
+                className="w-11 h-11 rounded-lg flex items-center justify-center font-bold text-lg shadow-md"
+                style={{ background: 'linear-gradient(135deg, #D4AF37, #F5E6A3)', color: '#0F172A' }}
+              >
+                {settings?.logo ? (
+                  <img src={settings.logo} alt="" className="w-full h-full object-cover rounded-lg" />
+                ) : shortName}
               </div>
               <div>
-                <p className="font-bold text-sm leading-none" style={{ color: '#D4AF37' }}>{firstLine}</p>
-                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>{secondLine}</p>
+                <p className="font-bold text-sm leading-tight" style={{ color: '#D4AF37' }}>{firstLine}</p>
+                <p className="text-[11px] mt-0.5 tracking-wide uppercase" style={{ color: 'rgba(255,255,255,0.45)' }}>{secondLine}</p>
               </div>
             </div>
           ) : (
-            <div className="w-9 h-9 rounded flex items-center justify-center font-bold mx-auto"
-              style={{ background: '#D4AF37', color: '#0F172A' }}>
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center font-bold mx-auto"
+              style={{ background: 'linear-gradient(135deg, #D4AF37, #F5E6A3)', color: '#0F172A' }}
+            >
               {shortName}
             </div>
           )}
           <button
-            className="hidden md:flex items-center justify-center w-7 h-7 rounded transition-all hover:bg-white/10"
+            className="hidden md:flex items-center justify-center w-7 h-7 rounded-md transition-all hover:bg-white/10"
             style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}
             onClick={() => setCollapsed(!collapsed)}
+            aria-label="Collapse sidebar"
           >
             <MdChevronLeft size={16} style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s' }} />
           </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-5" style={{ scrollbarGutter: 'stable' }}>
-          <div className="flex flex-col" style={{ gap: '2px' }}>
+        <nav className="flex-1 overflow-y-auto px-3 py-5">
+          <div className="flex flex-col gap-1">
             {navItems.map(({ to, icon: Icon, label }) => (
               <NavLink
                 key={to}
                 to={to}
                 onClick={() => setMobileOpen(false)}
-                className="flex items-center rounded-lg transition-all duration-200"
-                style={{ padding: collapsed ? '12px 0' : '12px 12px' }}
+                className="block rounded-lg transition-all duration-200"
               >
                 {({ isActive }) => (
                   <div
-                    className="flex items-center w-full rounded-lg transition-all duration-200"
+                    className="flex items-center rounded-lg transition-all duration-200"
                     style={{
-                      background: isActive ? 'rgba(59,130,246,0.15)' : 'transparent',
-                      border: isActive ? '1px solid rgba(59,130,246,0.25)' : '1px solid transparent',
-                      padding: collapsed ? '10px 0' : '10px 12px',
+                      background: isActive ? 'rgba(212, 175, 55, 0.12)' : 'transparent',
+                      border: isActive ? '1px solid rgba(212, 175, 55, 0.25)' : '1px solid transparent',
+                      padding: collapsed ? '12px 0' : '11px 14px',
                       justifyContent: collapsed ? 'center' : 'flex-start',
                     }}
                   >
                     <Icon
-                      size={22}
+                      size={21}
                       style={{
-                        color: isActive ? '#60A5FA' : 'rgba(255,255,255,0.55)',
+                        color: isActive ? '#D4AF37' : 'rgba(255,255,255,0.55)',
                         flexShrink: 0,
-                        transition: 'color 0.2s',
                       }}
                     />
                     {!collapsed && (
                       <span
                         className="text-sm font-medium ml-3"
-                        style={{
-                          color: isActive ? '#60A5FA' : 'rgba(255,255,255,0.75)',
-                          transition: 'color 0.2s',
-                        }}
+                        style={{ color: isActive ? '#D4AF37' : 'rgba(255,255,255,0.78)' }}
                       >
                         {label}
                       </span>
@@ -135,15 +144,15 @@ const Sidebar = ({ setToken }) => {
         </nav>
 
         {/* Logout */}
-        <div className="px-3 py-4 border-t flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+        <div className="px-3 py-4 border-t flex-shrink-0" style={{ borderColor: 'rgba(212, 175, 55, 0.12)' }}>
           <button
             onClick={handleLogout}
-            className="flex items-center w-full rounded-lg transition-all duration-200 hover:bg-red-900/15"
-            style={{ padding: collapsed ? '12px 0' : '12px 12px', justifyContent: collapsed ? 'center' : 'flex-start' }}
+            className="flex items-center w-full rounded-lg transition-all duration-200 hover:bg-red-500/10"
+            style={{ padding: collapsed ? '12px 0' : '11px 14px', justifyContent: collapsed ? 'center' : 'flex-start' }}
           >
-            <MdLogout size={22} style={{ color: 'rgba(255,100,100,0.7)', flexShrink: 0 }} />
+            <MdLogout size={21} style={{ color: 'rgba(248,113,113,0.85)', flexShrink: 0 }} />
             {!collapsed && (
-              <span className="text-sm font-medium ml-3" style={{ color: 'rgba(255,100,100,0.7)' }}>
+              <span className="text-sm font-medium ml-3" style={{ color: 'rgba(248,113,113,0.85)' }}>
                 Logout
               </span>
             )}

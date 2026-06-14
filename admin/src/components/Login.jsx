@@ -38,50 +38,51 @@ const Login = ({ setToken }) => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#0F172A' }}>
-      <form onSubmit={adminLoginHandler} className="w-full max-w-sm flex flex-col gap-4">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#F8FAFC' }}>
+      <form onSubmit={adminLoginHandler} className="w-full max-w-md flex flex-col gap-5 p-8 rounded-xl"
+        style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 4px 16px rgba(15,23,42,0.08)' }}>
         <div className="text-center mb-2">
-          <h1 className="text-lg font-bold" style={{ color: '#D4AF37' }}>Abay Grand Hotel</h1>
+          <h1 className="text-lg font-bold" style={{ color: '#1E293B' }}>Abay Grand Hotel</h1>
           <p className="text-xs mt-1" style={{ color: '#64748B' }}>Admin Login</p>
         </div>
 
         {error && (
-          <p className="text-xs text-center py-2 px-3 rounded" style={{ background: 'rgba(220,38,38,0.15)', color: '#FCA5A5' }}>
+          <p className="text-xs text-center py-2 px-3 rounded" style={{ background: 'rgba(220,38,38,0.1)', color: '#DC2626' }}>
             {error}
           </p>
         )}
 
         <div>
-          <label className="block text-xs mb-1 font-medium" style={{ color: '#94A3B8' }}>Email</label>
+          <label className="block text-sm mb-1.5 font-bold" style={{ color: '#1E293B' }}>Email</label>
           <input
             type="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
-            className="w-full px-4 py-3 rounded text-sm outline-none"
-            style={{ background: '#1E293B', border: '1px solid #334155', color: '#F1F5F9' }}
+            className="w-full px-4 rounded text-sm outline-none"
+            style={{ height: '56px', background: '#F8FAFC', border: '1.5px solid #E2E8F0', color: '#1E293B' }}
           />
         </div>
 
         <div>
-          <label className="block text-xs mb-1 font-medium" style={{ color: '#94A3B8' }}>Password</label>
+          <label className="block text-sm mb-1.5 font-bold" style={{ color: '#1E293B' }}>Password</label>
           <div className="relative">
             <input
               type={showPass ? 'text' : 'password'}
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              className="w-full px-4 py-3 rounded text-sm outline-none pr-10"
-              style={{ background: '#1E293B', border: '1px solid #334155', color: '#F1F5F9' }}
+              className="w-full px-4 rounded text-sm outline-none pr-10"
+              style={{ height: '56px', background: '#F8FAFC', border: '1.5px solid #E2E8F0', color: '#1E293B' }}
             />
             <button type="button" onClick={() => setShowPass(!showPass)}
-              className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: '#64748B' }}>
-              {showPass ? <MdVisibilityOff size={18} /> : <MdVisibility size={18} />}
+              className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: '#94A3B8' }}>
+              {showPass ? <MdVisibilityOff size={20} /> : <MdVisibility size={20} />}
             </button>
           </div>
         </div>
 
-        <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full">
+        <Button type="submit" variant="gold" size="lg" loading={loading} className="w-full">
           Sign In
         </Button>
       </form>
