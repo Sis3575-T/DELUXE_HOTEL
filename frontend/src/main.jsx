@@ -4,7 +4,7 @@ import './index.css'
 import App from './App.jsx'
 import { BrowserRouter } from 'react-router-dom'
 import RoomContextProvider from './context/RoomContext.jsx'
-import abayIconUrl from './assets/abay-icon.svg?url'
+import abayIconUrl from './assets/abay-ag-monogram.svg?url'
 
 const setFaviconFromSvgUrl = async (url) => {
   try {

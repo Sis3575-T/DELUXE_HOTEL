@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
-import abayIconUrl from './assets/abay-icon.svg?url'
+import abayIconUrl from './assets/abay-ag-monogram.svg?url'
 
 const setFaviconFromSvgUrl = async (url) => {
   try {
