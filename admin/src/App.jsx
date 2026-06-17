@@ -24,6 +24,7 @@ import CalendarView from './pages/CalendarView.jsx'
 import CustomerHistory from './pages/CustomerHistory.jsx'
 import BackupRestore from './pages/BackupRestore.jsx'
 import Notifications from './pages/Notifications.jsx'
+import Payments from './pages/Payments.jsx'
 
 export const backendUrl = 'http://localhost:4000'
 
@@ -85,6 +86,31 @@ const App = () => {
   }, [token])
 
   useEffect(() => {
+    const id = axios.interceptors.response.use(
+      (response) => {
+        try {
+          const data = response?.data
+          if (data && data.success === false) {
+            const msg = (data.message || '').toLowerCase()
+            if (msg.includes('unauthor') || msg.includes('not authorized') || msg.includes('authentication not successful')) {
+              setToken('')
+              return Promise.reject(new Error('unauthorized'))
+            }
+          }
+        } catch (e) {}
+        return response
+      },
+      (error) => {
+        try {
+          if (error?.response?.status === 401) setToken('')
+        } catch (e) {}
+        return Promise.reject(error)
+      }
+    )
+    return () => axios.interceptors.response.eject(id)
+  }, [])
+
+  useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
     try { localStorage.setItem('abay-theme', darkMode ? 'dark' : 'light') } catch {}
   }, [darkMode])
@@ -142,6 +168,7 @@ const App = () => {
                 <Route path="/customer-history" element={<CustomerHistory />} />
                 <Route path="/backup" element={<BackupRestore />} />
                 <Route path="/notifications" element={<Notifications />} />
+                <Route path="/payments" element={<Payments />} />
               </Routes>
             </div>
           </main>

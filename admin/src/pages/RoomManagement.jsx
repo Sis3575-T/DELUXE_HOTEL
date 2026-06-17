@@ -32,6 +32,10 @@ const RoomManagement = ({ token }) => {
   const [status, setStatus] = useState('available')
   const [image, setImage] = useState(null)
   const [images, setImages] = useState([])
+  const [amenitiesList, setAmenitiesList] = useState([])
+  const [amenityTitle, setAmenityTitle] = useState('')
+  const [amenityDesc, setAmenityDesc] = useState('')
+  const [amenityIcon, setAmenityIcon] = useState('')
   const [errors, setErrors] = useState({})
 
   const getAuthHeaders = () => {
@@ -67,6 +71,7 @@ const RoomManagement = ({ token }) => {
     setStatus('available')
     setImage(null)
     setImages([])
+    setAmenitiesList([])
     setErrors({})
     setShowModal(true)
   }
@@ -83,6 +88,7 @@ const RoomManagement = ({ token }) => {
     setStatus(room.status || (room.available !== false ? 'available' : 'inactive'))
     setImage(null)
     setImages([])
+    setAmenitiesList(room.amenities || [])
     setErrors({})
     setShowModal(true)
   }
@@ -112,6 +118,13 @@ const RoomManagement = ({ token }) => {
       fd.append('roomType', roomType)
       fd.append('capacity', String(capacity))
       fd.append('status', status)
+      // include amenities as JSON
+      try {
+        fd.append('amenities', JSON.stringify(amenitiesList || []))
+      } catch (err) {
+        console.warn('Could not serialize amenities', err)
+        fd.append('amenities', '[]')
+      }
       if (editRoom) fd.append('id', editRoom._id)
 
       const url = editRoom ? backendUrl + '/api/hotel/edit' : backendUrl + '/api/hotel/add'
@@ -245,7 +258,7 @@ const RoomManagement = ({ token }) => {
                   <div className="flex items-start justify-between" style={{ marginBottom: '12px' }}>
                     <div>
                       <h3 className="font-semibold" style={{ color: '#1E293B' }}>{room.name}</h3>
-                      <p className="text-xs mt-0.5" style={{ color: '#94A3B8' }}>Capacity: {room.capacity || 2} guests</p>
+                      <p className="text-xs mt-0.5" style={{ color: '#94A3B8' }}>Occupancy: {room.occupancy || (room.capacity ? `1-${room.capacity} persons` : '1-2 persons')}</p>
                     </div>
                     <p className="font-bold text-lg" style={{ color: '#D4AF37' }}>
                       ETB {room.price}
@@ -413,6 +426,35 @@ const RoomManagement = ({ token }) => {
                 {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
               </select>
               <p className="text-xs mt-1" style={{ color: '#94A3B8' }}>Actual availability is calculated from bookings</p>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold" style={{ color: '#6B7280', marginBottom: '6px' }}>Amenities / Features</label>
+            <div className="mb-2">
+              {amenitiesList.map((a, i) => (
+                <div key={i} className="flex items-center justify-between p-2 border rounded mb-2">
+                  <div>
+                    <div className="font-semibold">{a.title}</div>
+                    {a.desc && <div className="text-xs" style={{ color: '#94A3B8' }}>{a.desc}</div>}
+                  </div>
+                  <div>
+                    <button type="button" className="text-xs text-red-600" onClick={() => { setAmenitiesList(prev => prev.filter((_, idx) => idx !== i)) }}>Remove</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+              <input className="input-field" placeholder="Icon (optional)" value={amenityIcon} onChange={e => setAmenityIcon(e.target.value)} />
+              <input className="input-field" placeholder="Title (e.g. Bathtub)" value={amenityTitle} onChange={e => setAmenityTitle(e.target.value)} />
+              <input className="input-field" placeholder="Short description (optional)" value={amenityDesc} onChange={e => setAmenityDesc(e.target.value)} />
+            </div>
+            <div>
+              <Button type="button" variant="secondary" onClick={() => {
+                if (!amenityTitle.trim()) return notify.error('Amenity title is required')
+                setAmenitiesList(prev => [...prev, { icon: amenityIcon || '', title: amenityTitle.trim(), desc: amenityDesc.trim() }])
+                setAmenityIcon(''); setAmenityTitle(''); setAmenityDesc('')
+              }}>Add Amenity</Button>
             </div>
           </div>
 

@@ -3,13 +3,14 @@ import axios from 'axios'
 import { backendUrl } from '../App'
 import {
   MdSearch, MdCheckCircle, MdCancel, MdMeetingRoom, MdLogout,
-  MdClose, MdHistory, MdRefresh, MdEventNote,
+  MdClose, MdHistory, MdRefresh, MdEventNote, MdPayment,
 } from 'react-icons/md'
 
 const statusBadge = (status) => {
   const map = {
     'Pending':     { bg: '#FEF3C7', color: '#D97706' },
     'Approved':    { bg: '#DCFCE7', color: '#16A34A' },
+    'Confirmed':   { bg: '#DCFCE7', color: '#16A34A' },
     'Rejected':    { bg: '#FEE2E2', color: '#DC2626' },
     'Checked In':  { bg: '#DBEAFE', color: '#2563EB' },
     'Checked Out': { bg: '#F3F4F6', color: '#6B7280' },
@@ -43,6 +44,7 @@ const paymentBadge = (status) => {
     'Pending': { bg: '#FEF3C7', color: '#D97706' },
     'Partially Paid': { bg: '#DBEAFE', color: '#2563EB' },
     'Paid': { bg: '#DCFCE7', color: '#16A34A' },
+    'Failed': { bg: '#FEE2E2', color: '#DC2626' },
   }
   const s = map[status] || map['Pending']
   return (
@@ -259,6 +261,9 @@ const MyReservations = () => {
                             <div><span className="font-medium" style={{ color: '#6B7280' }}>Payment:</span> {paymentBadge(res.paymentStatus)}</div>
                           </>
                         )}
+                        {res.paymentMethod && (
+                          <div><span className="font-medium" style={{ color: '#6B7280' }}>Payment Method:</span> <span style={{ color: '#1E293B' }}>{res.paymentMethod}</span></div>
+                        )}
                         {res.createdBy?.name && (
                           <div className="col-span-2">
                             <span className="font-medium" style={{ color: '#6B7280' }}>Booked by:</span>{' '}
@@ -268,6 +273,35 @@ const MyReservations = () => {
                       </div>
 
                       <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t" style={{ borderColor: '#E5E7EB' }}>
+                        {res.paymentMethod === 'Chapa' && res.paymentStatus !== 'Paid' && res.status !== 'Cancelled' && (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation()
+                              try {
+                                const r = await axios.post(`${backendUrl}/api/payment/initialize`, {
+                                  bookingId: res._id,
+                                  guestName: res.name,
+                                  guestEmail: res.email,
+                                  guestPhone: res.phone || '',
+                                  paymentMethod: 'Chapa',
+                                  amount: res.totalAmount || 0,
+                                  currency: 'ETB',
+                                })
+                                if (r.data?.checkoutUrl) {
+                                  window.location.href = r.data.checkoutUrl
+                                } else {
+                                  alert(r.data?.message || 'Failed to initiate payment')
+                                }
+                              } catch {
+                                alert('Failed to initiate payment. Please try again.')
+                              }
+                            }}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded text-xs font-medium transition-all hover:opacity-80"
+                            style={{ background: '#FEF3C7', color: '#D97706', border: '1px solid #FDE68A' }}
+                          >
+                            <MdPayment size={14} /> Pay Now (Chapa)
+                          </button>
+                        )}
                         {canCancel(res.status) && (
                           <button
                             onClick={(e) => { e.stopPropagation(); setCancelTarget(res) }}

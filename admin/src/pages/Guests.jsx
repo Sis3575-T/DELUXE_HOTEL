@@ -15,7 +15,7 @@ const Guests = () => {
   useEffect(() => {
     setLoading(true)
     setError(null)
-    axios.get(backendUrl + '/api/reservation/get')
+    axios.get(backendUrl + '/api/reservation/get', { headers: { Authorization: `Bearer ${localStorage.getItem('adminToken')}` } })
       .then(r => setReservations(Array.isArray(r.data) ? r.data : []))
       .catch(() => { setError('Failed to load guest data'); setReservations([]) })
       .finally(() => setLoading(false))

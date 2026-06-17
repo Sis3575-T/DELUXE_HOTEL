@@ -149,4 +149,40 @@ const getPublicSettings = async (req, res) => {
   }
 }
 
-export { getSettings, updateSettings, getPublicSettings }
+const updateSettingsJson = async (req, res) => {
+  try {
+    const updateData = {}
+    const fields = [
+      'hotelName', 'address', 'phone', 'email', 'website',
+      'description', 'tagline', 'heroButtonText', 'heroImage',
+      'newsletterTitle', 'newsletterButtonText', 'newsletterPlaceholder',
+      'roomsSectionTitle', 'facilityTitle', 'facilitySubtitle',
+      'aboutTitle', 'aboutSubtitle', 'aboutContent', 'aboutImage',
+      'contactTitle', 'contactSubtitle', 'copyrightText',
+      'checkinTime', 'checkoutTime', 'currency', 'taxRate'
+    ]
+    fields.forEach(f => {
+      if (req.body[f] !== undefined) updateData[f] = req.body[f]
+    })
+
+    if (req.body.socialLinks !== undefined) {
+      updateData.socialLinks = typeof req.body.socialLinks === 'string'
+        ? JSON.parse(req.body.socialLinks)
+        : req.body.socialLinks
+    }
+
+    let settings = await Settings.findOne()
+    if (!settings) {
+      settings = await Settings.create({ ...defaultSettings, ...updateData })
+    } else {
+      settings = await Settings.findByIdAndUpdate(settings._id, updateData, { new: true })
+    }
+
+    res.json({ success: true, message: 'Settings updated successfully', settings })
+  } catch (error) {
+    console.error('updateSettingsJson error:', error?.message || error)
+    res.status(500).json({ success: false, message: 'Error updating settings' })
+  }
+}
+
+export { getSettings, updateSettings, updateSettingsJson, getPublicSettings }

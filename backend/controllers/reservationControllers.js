@@ -1,8 +1,11 @@
 import Reservation from '../models/reservationModels.js'
 import hotelModel from '../models/hotelModels.js'
+import Payment from '../models/paymentModels.js'
+import paymentConfig from '../config/payment.js'
 import { logActivity } from './activityControllers.js'
 import { createNotification } from './notificationControllers.js'
 import { calculateBookingPrice } from '../utils/pricing.js'
+import { initializeTransaction as chapaInitialize, generateTxRef } from '../utils/chapa.js'
 
 const PAYMENT_STATUSES = ['Pending', 'Partially Paid', 'Paid']
 
@@ -547,6 +550,155 @@ const checkAvailability = async (req, res) => {
   }
 }
 
+const bookWithChapa = async (req, res) => {
+  try {
+    const { name, email, phone, checkin, checkout, guests, roomName, roomId, paymentMethod } = req.body
+
+    if (!name || !email || !checkin || !checkout || !guests || !roomName) {
+      return res.json({ success: false, message: 'All booking fields are required' })
+    }
+    if (checkin >= checkout) {
+      return res.json({ success: false, message: 'Check-out date must be after check-in date' })
+    }
+    if (paymentMethod !== 'Chapa') {
+      return res.json({ success: false, message: 'Only Chapa payment is supported at this endpoint' })
+    }
+
+    let resolvedRoomId = roomId ? String(roomId) : ''
+    if (!resolvedRoomId && roomName) {
+      const hotel = await hotelModel.findOne({ name: roomName })
+      if (hotel) resolvedRoomId = hotel._id.toString()
+    }
+    if (!resolvedRoomId) {
+      return res.json({ success: false, message: 'Room ID is required for booking validation' })
+    }
+
+    const overlapping = await getOverlappingReservations(resolvedRoomId, checkin, checkout, null, roomName)
+    if (overlapping.length > 0) {
+      return res.json({
+        success: false,
+        message: 'This room is already booked for the selected dates. Please choose different dates or another room.',
+      })
+    }
+
+    const hotel = await hotelModel.findById(resolvedRoomId)
+    if (!hotel) return res.json({ success: false, message: 'Room not found' })
+    if (hotel.status === 'inactive') return res.json({ success: false, message: 'This room is inactive and cannot be booked.' })
+    if (hotel.status === 'maintenance') return res.json({ success: false, message: 'This room is under maintenance and cannot be booked.' })
+
+    const pricing = calculateBookingPrice(hotel.price, checkin, checkout)
+    if (pricing.nights <= 0) return res.json({ success: false, message: 'Invalid booking dates' })
+
+    const tx_ref = generateTxRef('BOOK')
+    const clientInfo = getClientInfo(req.body)
+
+    const newReservation = new Reservation({
+      name, email, phone, checkin, checkout, guests, roomName,
+      roomId: resolvedRoomId,
+      pricePerNight: pricing.pricePerNight,
+      nights: pricing.nights,
+      totalAmount: pricing.totalAmount,
+      paymentMethod: 'Chapa',
+      paymentStatus: 'Pending',
+      status: 'Pending',
+      createdBy: clientInfo,
+    })
+    await newReservation.save()
+
+    const payment = new Payment({
+      transactionId: tx_ref,
+      bookingId: newReservation._id,
+      guestName: name,
+      guestEmail: email,
+      guestPhone: phone || '',
+      paymentMethod: 'Chapa',
+      amount: pricing.totalAmount,
+      currency: 'ETB',
+      status: 'Pending',
+      verificationStatus: 'Unverified',
+      approvalStatus: 'Pending',
+    })
+    await payment.save()
+
+    const chapaPayload = {
+      amount: pricing.totalAmount,
+      currency: 'ETB',
+      email: email || '',
+      first_name: name.split(' ')[0] || name,
+      last_name: name.split(' ').slice(1).join(' ') || '',
+      tx_ref,
+      callback_url: paymentConfig.chapaCallbackUrl,
+      return_url: paymentConfig.chapaReturnUrl,
+      customization: {
+        title: 'Hotel Booking Payment',
+        description: `Payment for ${roomName} - ${name}`,
+      },
+    }
+
+    let chapaResult
+    try {
+      chapaResult = await chapaInitialize(chapaPayload)
+    } catch (chapaError) {
+      const chapaMsg = chapaError?.chapaData?.message || chapaError?.message || 'Unknown error'
+      console.error('Chapa initialization error:', chapaMsg, chapaError?.chapaData)
+      payment.status = 'Failed'
+      payment.chapaResponse = chapaError?.chapaData || { error: chapaError?.message || String(chapaError) }
+      payment.notes = 'Chapa initialization failed: ' + chapaMsg
+      await payment.save()
+      await Reservation.findByIdAndDelete(newReservation._id)
+      return res.status(chapaError?.status || 502).json({
+        success: false,
+        message: 'Payment gateway initialization failed',
+        error: chapaError?.chapaData || chapaError?.message || String(chapaError),
+        status: chapaError?.status || 502,
+      })
+    }
+
+    payment.chapaResponse = chapaResult
+    await payment.save()
+
+    const checkoutUrl = chapaResult.data?.checkout_url || null
+    if (!checkoutUrl) {
+      payment.status = 'Failed'
+      payment.notes = 'No checkout URL from Chapa'
+      await payment.save()
+      await Reservation.findByIdAndDelete(newReservation._id)
+      return res.json({
+        success: false,
+        message: 'Payment gateway initialization failed. Please try again.',
+      })
+    }
+
+    logActivity({
+      action: 'Booking with Chapa',
+      userId: email || '',
+      userName: name,
+      userRole: 'Client',
+      reservationId: newReservation._id.toString(),
+      guestName: name,
+      details: `Booking created for ${name} at ${roomName} with Chapa payment. Total: ${pricing.totalAmount} ETB`,
+    })
+    createNotification({
+      type: 'booking_chapa_initiated',
+      message: `New Chapa payment initiated: ${name} - ${roomName} - ${pricing.totalAmount} ETB`,
+      relatedId: newReservation._id.toString(),
+      relatedModel: 'Reservation',
+    })
+
+    res.json({
+      success: true,
+      message: 'Booking created. Redirecting to payment...',
+      reservation: newReservation,
+      payment: payment.toObject(),
+      checkoutUrl,
+      tx_ref,
+    })
+  } catch (error) {
+    console.error('bookWithChapa error:', error?.message || error)
+    res.json({ success: false, message: 'Error processing booking with payment' })
+  }
+}
+
 export {
   createReservation,
   getAllReservation,
@@ -562,4 +714,5 @@ export {
   checkAvailability,
   getOverlappingReservations,
   BLOCKING_STATUSES,
+  bookWithChapa,
 }

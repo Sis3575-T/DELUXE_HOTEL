@@ -121,7 +121,7 @@ const Reservation = () => {
     setError(null)
     try {
       const [resRes, roomsRes] = await Promise.all([
-        axios.get(backendUrl + '/api/reservation/get'),
+        axios.get(backendUrl + '/api/reservation/get', { headers: getAuthHeaders() }),
         axios.get(backendUrl + '/api/hotel/list').catch(() => ({ data: { hotels: [] } })),
       ])
       setReservations(Array.isArray(resRes.data) ? resRes.data : [])

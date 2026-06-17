@@ -296,8 +296,8 @@ const Settings = () => {
     if (!validate()) return
     setSaving(true)
     try {
-      let body
       let headers = getAuthHeaders()
+      let r
       if (logo || aboutImage || heroImage) {
         const fd = new FormData()
         if (logo) fd.append('logo', logo)
@@ -310,12 +310,10 @@ const Settings = () => {
             fd.append(k, v)
           }
         })
-        body = fd
-        // Let axios set Content-Type with boundary for FormData
+        r = await axios.put(backendUrl + '/api/settings/update-files', fd, { headers })
       } else {
-        body = form
+        r = await axios.put(backendUrl + '/api/settings/update', form, { headers })
       }
-      const r = await axios.put(backendUrl + '/api/settings/update', body, { headers })
       if (r.data?.success) {
         notify.success('Settings saved successfully!')
         refreshSettings()

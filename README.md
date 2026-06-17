@@ -1,2 +1,1 @@
-# DELUXE_HOTEL
-# Abay_Grand_hotel
+# Abay_Grand_Hotel

@@ -7,25 +7,26 @@ const adminAuth = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1]
     }
     if (!token) {
-      return res.json({ success: false, message: "unauthorized user" })
+      return res.status(401).json({ success: false, message: "Unauthorized: No token provided" })
     }
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
 
-    if (typeof decoded === 'object' && decoded.email && decoded.password) {
+    if (typeof decoded === 'object') {
       const emailMatch = decoded.email === process.env.ADMIN_EMAIL
       const passMatch = decoded.password === process.env.ADMIN_PASSWORD
       if (!emailMatch || !passMatch) {
-        return res.json({ success: false, message: "user not authorized" })
+        return res.status(401).json({ success: false, message: "Unauthorized: Invalid credentials" })
       }
       req.admin = {
-        userId: decoded.email,
-        name: decoded.name || 'Administrator',
-        role: decoded.role || 'Admin',
+        userId: process.env.ADMIN_EMAIL,
+        name: decoded.name || process.env.ADMIN_NAME || 'Administrator',
+        role: decoded.role || process.env.ADMIN_ROLE || 'Admin',
       }
     } else {
-      const tokenStr = typeof decoded === 'string' ? decoded : String(decoded)
+      const tokenStr = String(decoded)
       if (tokenStr !== process.env.ADMIN_EMAIL + process.env.ADMIN_PASSWORD) {
-        return res.json({ success: false, message: "user not authorized" })
+        return res.status(401).json({ success: false, message: "Unauthorized: Invalid token" })
       }
       req.admin = {
         userId: process.env.ADMIN_EMAIL,
@@ -35,7 +36,13 @@ const adminAuth = async (req, res, next) => {
     }
     next()
   } catch (error) {
-    return res.json({ success: false, message: "Authentication not successful" })
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, message: "Token expired" })
+    }
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ success: false, message: "Invalid token" })
+    }
+    return res.status(401).json({ success: false, message: "Authentication failed" })
   }
 }
 

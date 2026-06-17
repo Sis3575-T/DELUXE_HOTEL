@@ -57,7 +57,7 @@ const Dashboard = () => {
     try {
       const [rRooms, rRes, rRev, rSub] = await Promise.all([
         axios.get(backendUrl + '/api/hotel/list').catch(() => ({ data: { hotels: [] } })),
-        axios.get(backendUrl + '/api/reservation/get').catch(() => ({ data: [] })),
+        axios.get(backendUrl + '/api/reservation/get', { headers: getAuthHeaders() }).catch(() => ({ data: [] })),
         axios.get(backendUrl + '/api/revenue/list', { headers: getAuthHeaders() }).catch(() => ({ data: { revenues: [] } })),
         axios.get(backendUrl + '/api/newsletter/count', { headers: getAuthHeaders() }).catch(() => ({ data: { count: 0 } })),
       ])

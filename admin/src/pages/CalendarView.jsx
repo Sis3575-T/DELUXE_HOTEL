@@ -33,7 +33,7 @@ const CalendarView = () => {
     try {
       const [rRooms, rRes] = await Promise.all([
         axios.get(backendUrl + '/api/hotel/list').catch(() => ({ data: { hotels: [] } })),
-        axios.get(backendUrl + '/api/reservation/get').catch(() => ({ data: [] })),
+        axios.get(backendUrl + '/api/reservation/get', { headers: getAuthHeaders() }).catch(() => ({ data: [] })),
       ])
       setRooms(rRooms.data?.hotels || [])
       setReservations(Array.isArray(rRes.data) ? rRes.data : [])

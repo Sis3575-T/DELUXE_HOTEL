@@ -75,7 +75,7 @@ const Revenue = () => {
     try {
       const [revRes, resRes] = await Promise.all([
         axios.get(backendUrl + '/api/revenue/list', { headers: getAuthHeaders() }),
-        axios.get(backendUrl + '/api/reservation/get').catch(() => ({ data: [] })),
+        axios.get(backendUrl + '/api/reservation/get', { headers: getAuthHeaders() }).catch(() => ({ data: [] })),
       ])
       setRevenues(revRes.data?.revenues || [])
       setReservations(Array.isArray(resRes.data) ? resRes.data : [])

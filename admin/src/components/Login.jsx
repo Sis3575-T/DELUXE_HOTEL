@@ -14,6 +14,17 @@ const Login = ({ setToken }) => {
   useEffect(() => {
     setEmail('')
     setPassword('')
+    const t = setTimeout(() => {
+      try {
+        setEmail('')
+        setPassword('')
+        const emailInput = document.querySelector('input[type="email"]')
+        const passInput = document.querySelector('input[type="password"]')
+        if (emailInput) emailInput.value = ''
+        if (passInput) passInput.value = ''
+      } catch {}
+    }, 50)
+    return () => clearTimeout(t)
   }, [])
 
   const adminLoginHandler = async (e) => {
@@ -64,6 +75,8 @@ const Login = ({ setToken }) => {
           <div className="w-3/4 max-w-sm">
             <input
               type="email"
+              name="login-email"
+              autoComplete="off"
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
@@ -78,6 +91,8 @@ const Login = ({ setToken }) => {
           <div className="relative w-3/4 max-w-sm">
             <input
               type={showPass ? 'text' : 'password'}
+              name="login-password"
+              autoComplete="new-password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               required

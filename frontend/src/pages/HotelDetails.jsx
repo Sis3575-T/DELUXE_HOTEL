@@ -1,11 +1,17 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { backendUrl } from '../App'
 import { FaWifi, FaTv, FaUtensils, FaSwimmingPool, FaConciergeBell } from 'react-icons/fa'
 
+const PAYMENT_METHODS = [
+  { id: 'Chapa', name: 'Chapa', description: 'Pay with Chapa (Online)' },
+  { id: 'pay_at_hotel', name: 'Pay at Hotel', description: 'Pay when you arrive' },
+]
+
 const HotelDetails = () => {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [room, setRoom] = useState(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -13,6 +19,7 @@ const HotelDetails = () => {
   const [formErrors, setFormErrors] = useState({})
   const [availability, setAvailability] = useState({ checking: false, available: true, message: '' })
   const availabilityTimer = useRef(null)
+  const [paymentMethod, setPaymentMethod] = useState('Chapa')
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -136,21 +143,33 @@ const HotelDetails = () => {
         setNotification({ type: 'error', message: availCheck.data.message || 'This room is not available for the selected dates.' })
         return
       }
-      const response = await axios.post(`${backendUrl}/api/reservation/create`, formData)
-      if (response.data?.success) {
-        setNotification({ type: 'success', message: 'Reservation booked successfully!' })
-        setAvailability({ checking: false, available: true, message: '' })
-        setFormData(prev => ({
-          ...prev,
-          name: '',
-          email: '',
-          phone: '',
-          checkin: '',
-          checkout: '',
-          guests: 1
-        }))
+      if (paymentMethod === 'Chapa') {
+        const response = await axios.post(`${backendUrl}/api/reservation/book-with-chapa`, {
+          ...formData,
+          paymentMethod: 'Chapa',
+        })
+        if (response.data?.success && response.data?.checkoutUrl) {
+          window.location.href = response.data.checkoutUrl
+        } else {
+          setNotification({ type: 'error', message: response.data?.message || 'Failed to initiate payment' })
+        }
       } else {
-        setNotification({ type: 'error', message: response.data.message || 'Failed to create reservation' })
+        const response = await axios.post(`${backendUrl}/api/reservation/create`, formData)
+        if (response.data?.success) {
+          setNotification({ type: 'success', message: 'Reservation booked successfully! You can pay at the hotel.' })
+          setAvailability({ checking: false, available: true, message: '' })
+          setFormData(prev => ({
+            ...prev,
+            name: '',
+            email: '',
+            phone: '',
+            checkin: '',
+            checkout: '',
+            guests: 1
+          }))
+        } else {
+          setNotification({ type: 'error', message: response.data.message || 'Failed to create reservation' })
+        }
       }
     } catch (error) {
       console.error('Booking error:', error)
@@ -325,12 +344,41 @@ const HotelDetails = () => {
               </div>
             )}
 
+            {bookingPrice && (
+              <div>
+                <label className="block text-sm font-bold mb-2">Payment Method</label>
+                <div className="space-y-2">
+                  {PAYMENT_METHODS.map(method => (
+                    <label
+                      key={method.id}
+                      className={`flex items-center gap-3 p-2.5 border rounded cursor-pointer transition-all ${
+                        paymentMethod === method.id ? 'border-lime-500 bg-lime-50' : 'border-gray-200 bg-white'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value={method.id}
+                        checked={paymentMethod === method.id}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        className="accent-lime-600"
+                      />
+                      <div>
+                        <p className="text-sm font-medium">{method.name}</p>
+                        <p className="text-xs text-gray-500">{method.description}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <button
               className="w-full bg-lime-600 text-white p-2 rounded hover:bg-lime-700 transition-colors duration-200 disabled:opacity-60"
               type="submit"
               disabled={submitting || (!availability.checking && !availability.available)}
             >
-              {submitting ? 'Booking...' : !availability.available && !availability.checking ? 'Not Available' : 'Book Now'}
+              {submitting ? 'Processing...' : !availability.available && !availability.checking ? 'Not Available' : paymentMethod === 'Chapa' ? 'Book & Pay Now' : 'Book Now'}
             </button>
           </form>
         </aside>

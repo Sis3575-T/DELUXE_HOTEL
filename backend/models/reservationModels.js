@@ -21,6 +21,7 @@ const reservationSchema = new mongoose.Schema({
   totalAmount: { type: Number, default: 0 },
   paymentStatus: { type: String, default: 'Pending', enum: ['Pending', 'Partially Paid', 'Paid'] },
   status: { type: String, default: 'Pending' },
+  paymentMethod: { type: String, default: '' },
   createdBy: { type: auditSubSchema, default: () => ({}) },
   approvedBy: { type: auditSubSchema, default: () => ({}) },
   rejectedBy: { type: auditSubSchema, default: () => ({}) },
@@ -29,5 +30,14 @@ const reservationSchema = new mongoose.Schema({
   cancelledBy: { type: auditSubSchema, default: () => ({}) },
   updatedBy: { type: auditSubSchema, default: () => ({}) },
 })
+
+reservationSchema.index({ email: 1 })
+reservationSchema.index({ roomId: 1 })
+reservationSchema.index({ roomName: 1 })
+reservationSchema.index({ status: 1 })
+reservationSchema.index({ checkin: 1 })
+reservationSchema.index({ checkout: 1 })
+reservationSchema.index({ checkin: 1, checkout: 1 })
+reservationSchema.index({ status: 1, checkin: 1, checkout: 1 })
 
 export default mongoose.model("Reservation", reservationSchema)

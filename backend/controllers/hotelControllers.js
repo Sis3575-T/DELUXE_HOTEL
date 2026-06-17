@@ -19,12 +19,25 @@ const uploadImages = async (files) => {
 
 const addHotel = async (req, res) => {
 	try {
-		const { name, price, description, roomType, capacity, available, status } = req.body;
+		const { name, price, description, roomType, capacity, available, status, amenities } = req.body;
 		const files = req.files?.length ? req.files : (req.file ? [req.file] : []);
 
 		const uploaded = files.length ? await uploadImages(files) : [];
 
 		const roomStatus = status || (available === 'false' || available === false ? 'inactive' : 'available')
+
+		// parse amenities if provided as JSON string
+		let parsedAmenities = []
+		if (amenities) {
+			if (typeof amenities === 'string') {
+				try {
+					parsedAmenities = JSON.parse(amenities)
+				} catch (e) {
+					// if parsing fails, ignore or wrap into a single entry
+					parsedAmenities = []
+				}
+			} else if (Array.isArray(amenities)) parsedAmenities = amenities
+		}
 
 		const hotelData = {
 			name,
@@ -33,7 +46,8 @@ const addHotel = async (req, res) => {
 			image: uploaded[0] || '',
 			images: uploaded,
 			roomType: roomType || 'Standard',
-			capacity: Number(capacity) || 2,
+			capacity: Math.max(1, Number(capacity) || 2),
+			amenities: parsedAmenities,
 			available: roomStatus === 'available',
 			status: roomStatus,
 			date: Date.now()
@@ -60,7 +74,7 @@ const listHotel = async (req, res) => {
 
 const editHotel = async (req, res) => {
 	try {
-		const { id, name, price, description, roomType, capacity, available, status } = req.body;
+		const { id, name, price, description, roomType, capacity, available, status, amenities } = req.body;
 		if (!id) return res.status(400).json({ success: false, message: 'Room id is required' });
 
 		const updateData = {};
@@ -68,7 +82,13 @@ const editHotel = async (req, res) => {
 		if (description) updateData.description = description;
 		if (price) updateData.price = Number(price);
 		if (roomType) updateData.roomType = roomType;
-		if (capacity) updateData.capacity = Number(capacity);
+		if (capacity) updateData.capacity = Math.max(1, Number(capacity));
+		// parse amenities if provided
+		if (amenities !== undefined) {
+			if (typeof amenities === 'string') {
+				try { updateData.amenities = JSON.parse(amenities) } catch { updateData.amenities = [] }
+			} else if (Array.isArray(amenities)) updateData.amenities = amenities
+		}
 		if (available !== undefined) updateData.available = available === 'true' || available === true;
 		if (status) {
 			updateData.status = status;
