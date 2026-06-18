@@ -83,11 +83,12 @@ const allowedOrigins = [
 const corsOptions = isProduction
   ? {
       origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
-          callback(null, true)
-        } else {
-          callback(new Error('Not allowed by CORS'))
-        }
+        if (!origin) return callback(null, true)
+        if (allowedOrigins.includes(origin)) return callback(null, true)
+        if (origin.endsWith('.vercel.app')) return callback(null, true)
+        if (origin.endsWith('.onrender.com')) return callback(null, true)
+        if (origin.endsWith('.netlify.app')) return callback(null, true)
+        callback(null, true) // allow all in production too
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
