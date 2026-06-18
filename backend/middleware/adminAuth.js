@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken"
+import Admin from "../models/adminModel.js"
 
 const adminAuth = async (req, res, next) => {
   try {
@@ -11,28 +12,16 @@ const adminAuth = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    const admin = await Admin.findById(decoded.id).select('-password')
+    if (!admin) {
+      return res.status(401).json({ success: false, message: "Unauthorized: Admin not found" })
+    }
 
-    if (typeof decoded === 'object') {
-      const emailMatch = decoded.email === process.env.ADMIN_EMAIL
-      const passMatch = decoded.password === process.env.ADMIN_PASSWORD
-      if (!emailMatch || !passMatch) {
-        return res.status(401).json({ success: false, message: "Unauthorized: Invalid credentials" })
-      }
-      req.admin = {
-        userId: process.env.ADMIN_EMAIL,
-        name: decoded.name || process.env.ADMIN_NAME || 'Administrator',
-        role: decoded.role || process.env.ADMIN_ROLE || 'Admin',
-      }
-    } else {
-      const tokenStr = String(decoded)
-      if (tokenStr !== process.env.ADMIN_EMAIL + process.env.ADMIN_PASSWORD) {
-        return res.status(401).json({ success: false, message: "Unauthorized: Invalid token" })
-      }
-      req.admin = {
-        userId: process.env.ADMIN_EMAIL,
-        name: process.env.ADMIN_NAME || 'Administrator',
-        role: process.env.ADMIN_ROLE || 'Admin',
-      }
+    req.admin = {
+      id: admin._id,
+      name: admin.name,
+      email: admin.email,
+      role: admin.role,
     }
     next()
   } catch (error) {

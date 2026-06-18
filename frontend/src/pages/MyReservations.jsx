@@ -286,14 +286,16 @@ const MyReservations = () => {
                                   paymentMethod: 'Chapa',
                                   amount: res.totalAmount || 0,
                                   currency: 'ETB',
+                                  channels: [],
                                 })
                                 if (r.data?.checkoutUrl) {
                                   window.location.href = r.data.checkoutUrl
                                 } else {
                                   alert(r.data?.message || 'Failed to initiate payment')
                                 }
-                              } catch {
-                                alert('Failed to initiate payment. Please try again.')
+                              } catch (err) {
+                                const msg = err?.response?.data?.message || err?.response?.data?.error?.message || err?.message || 'Failed to initiate payment'
+                                alert(msg)
                               }
                             }}
                             className="flex items-center gap-1.5 px-4 py-2 rounded text-xs font-medium transition-all hover:opacity-80"

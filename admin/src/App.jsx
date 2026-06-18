@@ -4,6 +4,7 @@ import { Route, Routes, Navigate } from 'react-router-dom'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import Login from './components/Login.jsx'
+import ProtectedRoute from './components/ProtectedRoute.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import Topbar from './components/Topbar.jsx'
 import Dashboard from './pages/Dashboard.jsx'
@@ -26,7 +27,7 @@ import BackupRestore from './pages/BackupRestore.jsx'
 import Notifications from './pages/Notifications.jsx'
 import Payments from './pages/Payments.jsx'
 
-export const backendUrl = 'http://localhost:4000'
+export const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
 export const ThemeContext = createContext()
 export const useTheme = () => useContext(ThemeContext)
@@ -36,11 +37,12 @@ export const useSettings = () => useContext(SettingsContext)
 
 const App = () => {
   const [token, setTokenState] = useState(() => {
-    try { return localStorage.getItem('adminToken') || '' } catch { return '' }
+    try { return sessionStorage.getItem('adminToken') || '' } catch { return '' }
   })
   const [darkMode, setDarkMode] = useState(() => {
     try { return localStorage.getItem('abay-theme') === 'dark' } catch { return false }
   })
+  const [isVerifying, setIsVerifying] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [settings, setSettings] = useState({
     hotelName: 'Abay Grand Hotel', address: '', phone: '', email: '',
@@ -51,20 +53,18 @@ const App = () => {
   const setToken = (t) => {
     setTokenState(t)
     try {
-      if (t) localStorage.setItem('adminToken', t)
-      else {
-        localStorage.removeItem('adminToken')
-        try {
-          const err = new Error('token-cleared')
-          localStorage.setItem('adminTokenClearedAt', new Date().toISOString())
-          localStorage.setItem('adminTokenClearedStack', err.stack || '')
-        } catch {}
+      if (t) {
+        sessionStorage.setItem('adminToken', t)
+        localStorage.setItem('adminToken', t)
+      } else {
+        sessionStorage.removeItem('adminToken')
+        try { localStorage.removeItem('adminToken') } catch {}
       }
     } catch {}
   }
 
   const getAuthHeaders = () => {
-    const t = localStorage.getItem('adminToken')
+    const t = sessionStorage.getItem('adminToken')
     return t ? { Authorization: `Bearer ${t}` } : {}
   }
 
@@ -84,6 +84,21 @@ const App = () => {
     }
     else delete axios.defaults.headers.common['Authorization']
   }, [token])
+
+  useEffect(() => {
+    const verify = async () => {
+      const t = sessionStorage.getItem('adminToken')
+      if (!t) { setIsVerifying(false); return }
+      try {
+        const res = await axios.get(backendUrl + '/api/user/verify', {
+          headers: { Authorization: `Bearer ${t}` }
+        })
+        if (!res.data?.success) setToken('')
+      } catch { setToken('') }
+      finally { setIsVerifying(false) }
+    }
+    verify()
+  }, [])
 
   useEffect(() => {
     const id = axios.interceptors.response.use(
@@ -115,7 +130,6 @@ const App = () => {
     try { localStorage.setItem('abay-theme', darkMode ? 'dark' : 'light') } catch {}
   }, [darkMode])
 
-  // Debug helper: record last click target so we can trace unexpected logouts
   useEffect(() => {
     const handler = (e) => {
       try {
@@ -134,45 +148,54 @@ const App = () => {
     return () => document.removeEventListener('click', handler, true)
   }, [])
 
-  if (!token) return <Login setToken={setToken} />
-
   return (
     <ThemeContext.Provider value={{ darkMode, setDarkMode, sidebarCollapsed, setSidebarCollapsed }}>
       <SettingsContext.Provider value={{ settings, refreshSettings }}>
         <ToastContainer />
-        <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-          <Sidebar setToken={setToken} />
-          <Topbar setToken={setToken} />
-          <main
-            className="transition-all duration-300 min-h-screen"
-            style={{ marginLeft: sidebarCollapsed ? '72px' : '260px' }}
-          >
-            <div className="p-4 md:p-6 lg:p-8" style={{ paddingTop: '72px' }}>
-              <Routes>
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/rooms" element={<RoomManagement token={token} />} />
-                <Route path="/reservation" element={<Reservation />} />
-                <Route path="/guests" element={<Guests />} />
-                <Route path="/revenue" element={<Revenue />} />
-                <Route path="/reviews" element={<Reviews />} />
-                <Route path="/messages" element={<Messages />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/activity" element={<ActivityLog />} />
-                <Route path="/staff" element={<StaffManagement />} />
-                <Route path="/roles" element={<Roles />} />
-                <Route path="/housekeeping" element={<Housekeeping />} />
-                <Route path="/maintenance" element={<Maintenance />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="/calendar" element={<CalendarView />} />
-                <Route path="/customer-history" element={<CustomerHistory />} />
-                <Route path="/backup" element={<BackupRestore />} />
-                <Route path="/notifications" element={<Notifications />} />
-                <Route path="/payments" element={<Payments />} />
-              </Routes>
+        {isVerifying ? (
+          <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#D4AF37] mx-auto mb-4" />
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Verifying...</p>
             </div>
-          </main>
-        </div>
+          </div>
+        ) : (
+          <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+            {token && <Sidebar setToken={setToken} />}
+            {token && <Topbar setToken={setToken} />}
+            <main
+              className="transition-all duration-300 min-h-screen"
+              style={{ marginLeft: token ? (sidebarCollapsed ? '72px' : '260px') : '0' }}
+            >
+              <div className={token ? 'p-4 md:p-6 lg:p-8' : ''} style={token ? { paddingTop: '72px' } : {}}>
+                <Routes>
+                  <Route path="/admin/login" element={!token ? <Login setToken={setToken} /> : <Navigate to="/dashboard" replace />} />
+                  <Route path="/" element={<Navigate to={token ? '/dashboard' : '/admin/login'} replace />} />
+                  <Route path="/dashboard" element={token ? <ProtectedRoute setToken={setToken}><Dashboard /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/rooms" element={token ? <ProtectedRoute setToken={setToken}><RoomManagement token={token} /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/reservation" element={token ? <ProtectedRoute setToken={setToken}><Reservation /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/guests" element={token ? <ProtectedRoute setToken={setToken}><Guests /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/revenue" element={token ? <ProtectedRoute setToken={setToken}><Revenue /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/reviews" element={token ? <ProtectedRoute setToken={setToken}><Reviews /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/messages" element={token ? <ProtectedRoute setToken={setToken}><Messages /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/settings" element={token ? <ProtectedRoute setToken={setToken}><Settings /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/activity" element={token ? <ProtectedRoute setToken={setToken}><ActivityLog /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/staff" element={token ? <ProtectedRoute setToken={setToken}><StaffManagement /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/roles" element={token ? <ProtectedRoute setToken={setToken}><Roles /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/housekeeping" element={token ? <ProtectedRoute setToken={setToken}><Housekeeping /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/maintenance" element={token ? <ProtectedRoute setToken={setToken}><Maintenance /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/reports" element={token ? <ProtectedRoute setToken={setToken}><Reports /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/calendar" element={token ? <ProtectedRoute setToken={setToken}><CalendarView /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/customer-history" element={token ? <ProtectedRoute setToken={setToken}><CustomerHistory /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/backup" element={token ? <ProtectedRoute setToken={setToken}><BackupRestore /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/notifications" element={token ? <ProtectedRoute setToken={setToken}><Notifications /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="/payments" element={token ? <ProtectedRoute setToken={setToken}><Payments /></ProtectedRoute> : <Navigate to="/admin/login" replace />} />
+                  <Route path="*" element={<Navigate to={token ? '/dashboard' : '/admin/login'} replace />} />
+                </Routes>
+              </div>
+            </main>
+          </div>
+        )}
       </SettingsContext.Provider>
     </ThemeContext.Provider>
   )

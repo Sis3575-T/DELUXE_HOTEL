@@ -52,6 +52,8 @@ const paymentSchema = new mongoose.Schema({
     signature: { type: String },
     receivedAt: { type: Date, default: Date.now },
   }],
+  archived: { type: Boolean, default: false },
+  archivedAt: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 })

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
 import { backendUrl } from '../App'
-import { MdSearch, MdVisibility, MdCheckCircle, MdCancel, MdRefresh, MdAccountBalance, MdPayment, MdDateRange, MdTrendingUp } from 'react-icons/md'
+import { MdSearch, MdVisibility, MdCheckCircle, MdCancel, MdRefresh, MdAccountBalance, MdPayment, MdDateRange, MdTrendingUp, MdArchive, MdUnarchive, MdDeleteForever } from 'react-icons/md'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
@@ -53,9 +53,13 @@ const Payments = () => {
   const [methodBreakdown, setMethodBreakdown] = useState([])
   const [dailyBreakdown, setDailyBreakdown] = useState([])
   const [revenueLoading, setRevenueLoading] = useState(false)
+  const [datePreset, setDatePreset] = useState('all')
+  const [dateStart, setDateStart] = useState('')
+  const [dateEnd, setDateEnd] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
 
   const getAuthHeaders = () => {
-    const token = localStorage.getItem('adminToken')
+    const token = localStorage.getItem('adminToken') || sessionStorage.getItem('adminToken')
     return token ? { Authorization: `Bearer ${token}` } : {}
   }
 
@@ -66,6 +70,18 @@ const Payments = () => {
       if (statusFilter !== 'all') params.append('status', statusFilter)
       if (methodFilter !== 'all') params.append('method', methodFilter)
       if (search) params.append('search', search)
+      if (showArchived) params.append('showArchived', 'true')
+      if (datePreset === 'custom') {
+        if (dateStart) params.append('startDate', dateStart)
+        if (dateEnd) params.append('endDate', dateEnd)
+      } else if (datePreset !== 'all') {
+        const now = new Date()
+        let start
+        if (datePreset === 'thisMonth') start = new Date(now.getFullYear(), now.getMonth(), 1)
+        else if (datePreset === 'lastMonth') start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+        else if (datePreset === 'thisYear') start = new Date(now.getFullYear(), 0, 1)
+        if (start) params.append('startDate', start.toISOString())
+      }
       params.append('page', page)
       params.append('limit', '20')
 
@@ -80,7 +96,7 @@ const Payments = () => {
     } finally {
       setLoading(false)
     }
-  }, [statusFilter, methodFilter, search, page])
+  }, [statusFilter, methodFilter, search, page, showArchived, datePreset, dateStart, dateEnd])
 
   const fetchStats = useCallback(async () => {
     try {
@@ -122,7 +138,7 @@ const Payments = () => {
   useEffect(() => { fetchStats() }, [fetchStats])
   useEffect(() => { fetchRevenue() }, [fetchRevenue])
 
-  useEffect(() => { setPage(1) }, [statusFilter, methodFilter, search])
+  useEffect(() => { setPage(1) }, [statusFilter, methodFilter, search, showArchived, datePreset, dateStart, dateEnd])
 
   const openDetail = (payment) => {
     setSelectedPayment(payment)
@@ -193,6 +209,57 @@ const Payments = () => {
       }
     } catch (err) {
       notify.error(err.response?.data?.message || 'Cancel failed')
+    }
+    setConfirmAction(null)
+  }
+
+  const handleArchive = async (id) => {
+    try {
+      const r = await axios.put(backendUrl + '/api/payment/archive/' + id, {}, { headers: getAuthHeaders() })
+      if (r.data?.success) {
+        notify.success('Payment archived')
+        setDetailModal(false)
+        fetchPayments()
+        fetchStats()
+      } else {
+        notify.error(r.data?.message || 'Archive failed')
+      }
+    } catch (err) {
+      notify.error(err.response?.data?.message || 'Archive failed')
+    }
+    setConfirmAction(null)
+  }
+
+  const handleRestore = async (id) => {
+    try {
+      const r = await axios.put(backendUrl + '/api/payment/restore/' + id, {}, { headers: getAuthHeaders() })
+      if (r.data?.success) {
+        notify.success('Payment restored')
+        setDetailModal(false)
+        fetchPayments()
+        fetchStats()
+      } else {
+        notify.error(r.data?.message || 'Restore failed')
+      }
+    } catch (err) {
+      notify.error(err.response?.data?.message || 'Restore failed')
+    }
+    setConfirmAction(null)
+  }
+
+  const handleDelete = async (id) => {
+    try {
+      const r = await axios.delete(backendUrl + '/api/payment/delete/' + id, { headers: getAuthHeaders() })
+      if (r.data?.success) {
+        notify.success('Payment permanently deleted')
+        setDetailModal(false)
+        fetchPayments()
+        fetchStats()
+      } else {
+        notify.error(r.data?.message || 'Delete failed')
+      }
+    } catch (err) {
+      notify.error(err.response?.data?.message || 'Delete failed')
     }
     setConfirmAction(null)
   }
@@ -347,6 +414,28 @@ const Payments = () => {
           style={{ height: '40px', minWidth: '160px' }}>
           {METHOD_OPTIONS.map(m => <option key={m} value={m}>{m === 'all' ? 'All Methods' : m}</option>)}
         </select>
+        <select className="input-field" value={datePreset} onChange={e => setDatePreset(e.target.value)}
+          style={{ height: '40px', minWidth: '140px' }}>
+          <option value="all">All Dates</option>
+          <option value="thisMonth">This Month</option>
+          <option value="lastMonth">Last Month</option>
+          <option value="thisYear">This Year</option>
+          <option value="custom">Custom Range</option>
+        </select>
+        {datePreset === 'custom' && (
+          <>
+            <input type="date" value={dateStart} onChange={e => setDateStart(e.target.value)}
+              className="input-field" style={{ height: '40px', width: '140px' }} />
+            <span className="text-xs" style={{ color: '#9CA3AF' }}>to</span>
+            <input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)}
+              className="input-field" style={{ height: '40px', width: '140px' }} />
+          </>
+        )}
+        <label className="flex items-center gap-2 text-xs cursor-pointer select-none" style={{ color: '#6B7280', whiteSpace: 'nowrap' }}>
+          <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)}
+            style={{ accentColor: '#2563EB' }} />
+          Show Archived
+        </label>
         <Button variant="secondary" size="sm" icon={MdRefresh} onClick={() => { fetchPayments(); fetchStats() }}>Refresh</Button>
       </div>
 
@@ -380,7 +469,7 @@ const Payments = () => {
             </thead>
             <tbody>
               {payments.map((payment) => (
-                <tr key={payment._id} style={{ borderBottom: '1px solid #E5E7EB', background: '#FFFFFF' }}
+                <tr key={payment._id} style={{ borderBottom: '1px solid #E5E7EB', background: '#FFFFFF', opacity: payment.archived ? 0.55 : 1 }}
                   className="hover:opacity-80 cursor-pointer" onClick={() => openDetail(payment)}>
                   <td className="p-3 text-sm font-mono" style={{ color: '#1E293B' }}>{payment.transactionId}</td>
                   <td className="p-3">
@@ -394,6 +483,9 @@ const Payments = () => {
                       background: STATUS_COLORS[payment.status] || '#6B7280',
                       color: '#FFFFFF',
                     }}>{payment.status}</span>
+                    {payment.archived && (
+                      <span className="ml-1 px-1.5 py-0.5 rounded text-xs font-semibold" style={{ background: '#6B7280', color: '#FFFFFF', opacity: 0.6 }}>A</span>
+                    )}
                   </td>
                   <td className="p-3 text-sm" style={{ color: '#6B7280' }}>{formatDate(payment.createdAt)}</td>
                   <td className="p-3 text-center">
@@ -485,6 +577,13 @@ const Payments = () => {
                   color: '#FFFFFF',
                 }}>{selectedPayment.verificationStatus || 'Unverified'}</span>
               </div>
+              <div>
+                <p className="text-xs font-semibold mb-1" style={{ color: '#6B7280' }}>Archived</p>
+                <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{
+                  background: selectedPayment.archived ? '#6B7280' : '#059669',
+                  color: '#FFFFFF',
+                }}>{selectedPayment.archived ? 'Yes' : 'No'}</span>
+              </div>
             </div>
 
             {selectedPayment.paymentMethod === 'Chapa' && selectedPayment.chapaResponse && (
@@ -555,6 +654,22 @@ const Payments = () => {
                 </Button>
               </div>
             )}
+            <div className="flex gap-3 pt-2 border-t" style={{ borderColor: '#E5E7EB' }}>
+              {!selectedPayment.archived ? (
+                <Button variant="secondary" icon={MdArchive} onClick={() => setConfirmAction('archive')}>
+                  Archive
+                </Button>
+              ) : (
+                <>
+                  <Button variant="secondary" icon={MdUnarchive} onClick={() => handleRestore(selectedPayment._id)}>
+                    Restore
+                  </Button>
+                  <Button variant="danger" icon={MdDeleteForever} onClick={() => setConfirmAction('delete')}>
+                    Delete Permanently
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         )}
       </Modal>
@@ -568,25 +683,35 @@ const Payments = () => {
           else if (confirmAction === 'reject') handleReject(selectedPayment._id)
           else if (confirmAction === 'refund') handleRefund(selectedPayment._id)
           else if (confirmAction === 'cancel') handleCancel(selectedPayment._id)
+          else if (confirmAction === 'archive') handleArchive(selectedPayment._id)
+          else if (confirmAction === 'delete') handleDelete(selectedPayment._id)
         }}
         title={
           confirmAction === 'verify' ? 'Verify Payment' :
           confirmAction === 'reject' ? 'Reject Payment' :
-          confirmAction === 'refund' ? 'Refund Payment' : 'Cancel Payment'
+          confirmAction === 'refund' ? 'Refund Payment' :
+          confirmAction === 'archive' ? 'Archive Payment' :
+          confirmAction === 'delete' ? 'Delete Payment Permanently' : 'Cancel Payment'
         }
         message={
           confirmAction === 'verify' ? `Verify payment ${selectedPayment?.transactionId}? This will mark it as paid and confirm the associated booking.` :
           confirmAction === 'reject' ? `Reject payment ${selectedPayment?.transactionId}?` :
           confirmAction === 'refund' ? `Refund payment ${selectedPayment?.transactionId}? This action cannot be undone.` :
+          confirmAction === 'archive' ? `Archive payment ${selectedPayment?.transactionId}? It will be hidden from the default list.` :
+          confirmAction === 'delete' ? `Permanently delete payment ${selectedPayment?.transactionId}? This action cannot be undone.` :
           `Cancel payment ${selectedPayment?.transactionId}?`
         }
         confirmLabel={
           confirmAction === 'verify' ? 'Verify' :
           confirmAction === 'reject' ? 'Reject' :
-          confirmAction === 'refund' ? 'Refund' : 'Cancel'
+          confirmAction === 'refund' ? 'Refund' :
+          confirmAction === 'archive' ? 'Archive' :
+          confirmAction === 'delete' ? 'Delete' : 'Cancel'
         }
         variant={
           confirmAction === 'verify' ? 'primary' :
+          confirmAction === 'delete' ? 'danger' :
+          confirmAction === 'archive' ? 'secondary' :
           confirmAction === 'refund' ? 'danger' :
           confirmAction === 'reject' ? 'danger' : 'secondary'
         }

@@ -11,7 +11,7 @@ import PaymentResult from './pages/PaymentResult'
 import Footer from './components/Footer'
 import RoomContextProvider from './context/RoomContext'
 import SettingsProvider from './context/SettingsContext'
-export const backendUrl = 'http://localhost:4000'
+export const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 const App = () => {
   return(
     <SettingsProvider>

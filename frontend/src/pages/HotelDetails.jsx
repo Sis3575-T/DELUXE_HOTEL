@@ -9,6 +9,15 @@ const PAYMENT_METHODS = [
   { id: 'pay_at_hotel', name: 'Pay at Hotel', description: 'Pay when you arrive' },
 ]
 
+const CHAPA_CHANNELS = [
+  { id: 'Telebirr', name: 'Telebirr', description: 'Mobile Money' },
+  { id: 'CBE Birr', name: 'CBE Birr', description: 'Bank Mobile' },
+  { id: 'Visa', name: 'Visa', description: 'Credit/Debit Card' },
+  { id: 'MasterCard', name: 'MasterCard', description: 'Credit/Debit Card' },
+  { id: 'Mobile Banking', name: 'Mobile Banking', description: 'Bank App Transfer' },
+  { id: 'Internet Banking', name: 'Internet Banking', description: 'Online Banking' },
+]
+
 const HotelDetails = () => {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -20,6 +29,7 @@ const HotelDetails = () => {
   const [availability, setAvailability] = useState({ checking: false, available: true, message: '' })
   const availabilityTimer = useRef(null)
   const [paymentMethod, setPaymentMethod] = useState('Chapa')
+  const [selectedChannel, setSelectedChannel] = useState('')
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -147,6 +157,7 @@ const HotelDetails = () => {
         const response = await axios.post(`${backendUrl}/api/reservation/book-with-chapa`, {
           ...formData,
           paymentMethod: 'Chapa',
+          channels: selectedChannel ? [selectedChannel] : [],
         })
         if (response.data?.success && response.data?.checkoutUrl) {
           window.location.href = response.data.checkoutUrl
@@ -173,6 +184,7 @@ const HotelDetails = () => {
       }
     } catch (error) {
       console.error('Booking error:', error)
+      console.error('Chapa error details:', error.response?.data)
       const msg = error.response?.data?.message || 'Error occurred while booking. Please try again.'
       setNotification({ type: 'error', message: msg })
     } finally {
@@ -370,6 +382,36 @@ const HotelDetails = () => {
                     </label>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {paymentMethod === 'Chapa' && bookingPrice && (
+              <div>
+                <label className="block text-sm font-bold mb-2">Payment Channel (optional)</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {CHAPA_CHANNELS.map(ch => (
+                    <label
+                      key={ch.id}
+                      className={`flex items-center gap-2 p-2 border rounded cursor-pointer transition-all text-xs ${
+                        selectedChannel === ch.id ? 'border-lime-500 bg-lime-50' : 'border-gray-200 bg-white'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="chapaChannel"
+                        value={ch.id}
+                        checked={selectedChannel === ch.id}
+                        onChange={(e) => setSelectedChannel(e.target.value)}
+                        className="accent-lime-600"
+                      />
+                      <div>
+                        <p className="font-medium">{ch.name}</p>
+                        <p className="text-[10px] text-gray-500">{ch.description}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1">Selecting a channel takes you directly to that payment method on Chapa.</p>
               </div>
             )}
 
