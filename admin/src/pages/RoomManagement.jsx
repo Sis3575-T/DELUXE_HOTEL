@@ -36,6 +36,8 @@ const RoomManagement = ({ token }) => {
   const [amenityTitle, setAmenityTitle] = useState('')
   const [amenityDesc, setAmenityDesc] = useState('')
   const [amenityIcon, setAmenityIcon] = useState('')
+  const [imageDragOver, setImageDragOver] = useState(false)
+  const [imagesDragOver, setImagesDragOver] = useState(false)
   const [errors, setErrors] = useState({})
 
   const getAuthHeaders = () => {
@@ -319,7 +321,14 @@ const RoomManagement = ({ token }) => {
             <label className="block text-xs font-semibold mb-2" style={{ color: '#6B7280' }}>Room Images</label>
             <label
               className="flex flex-col items-center justify-center cursor-pointer transition-all rounded-lg mb-3"
-              style={{ height: '120px', border: '2px dashed var(--border)', background: 'var(--bg-subtle)' }}
+              style={{
+                height: '120px',
+                border: `2px dashed ${imageDragOver ? '#D4AF37' : 'var(--border)'}`,
+                background: imageDragOver ? 'rgba(212, 175, 55, 0.05)' : 'var(--bg-subtle)'
+              }}
+              onDragOver={e => { e.preventDefault(); setImageDragOver(true) }}
+              onDragLeave={() => setImageDragOver(false)}
+              onDrop={e => { e.preventDefault(); setImageDragOver(false); const f = e.dataTransfer.files?.[0]; if (f?.type?.startsWith('image/')) setImage(f) }}
             >
               {image ? (
                 <img src={URL.createObjectURL(image)} alt="preview" className="h-full w-full object-cover rounded-lg" />
@@ -335,7 +344,13 @@ const RoomManagement = ({ token }) => {
             </label>
             <label
               className="flex flex-col items-center justify-center cursor-pointer transition-all rounded-lg p-4"
-              style={{ border: '2px dashed var(--border)', background: 'var(--bg-subtle)' }}
+              style={{
+                border: `2px dashed ${imagesDragOver ? '#D4AF37' : 'var(--border)'}`,
+                background: imagesDragOver ? 'rgba(212, 175, 55, 0.05)' : 'var(--bg-subtle)'
+              }}
+              onDragOver={e => { e.preventDefault(); setImagesDragOver(true) }}
+              onDragLeave={() => setImagesDragOver(false)}
+              onDrop={e => { e.preventDefault(); setImagesDragOver(false); const files = Array.from(e.dataTransfer.files || []).filter(f => f?.type?.startsWith('image/')); if (files.length > 0) setImages(prev => [...prev, ...files]) }}
             >
               <MdCloudUpload size={22} style={{ color: 'var(--text-muted)' }} />
               <p className="text-xs mt-1 font-medium" style={{ color: 'var(--text-muted)' }}>Add additional images (optional)</p>
