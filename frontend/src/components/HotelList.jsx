@@ -5,8 +5,7 @@ import { FaBath, FaUserFriends, FaWifi, FaBed } from 'react-icons/fa'
 import {Link} from 'react-router-dom'
 import { useSettings } from '../context/SettingsContext'
 
-const amenitiesList = [
-  { label: '1-2 persons', icon: <FaUserFriends className='text-gray-600' />},
+const staticAmenities = [
   { label: 'Bathtub', icon: <FaBath className='text-gray-600'/>},
   { label: 'King Size Bed', icon: <FaBed className='text-gray-600' /> },
   { label: 'Free WiFi', icon: <FaWifi className='text-gray-600'/> }
@@ -39,8 +38,12 @@ const HotelList = () => {
                     <p className='text-lg font-bold text-gray-800'>${price}</p>
                   </div>
                   <div className='grid grid-cols-2 gap-4 text-base text-gray-700'>
+                    <div className='flex items-center gap-2'>
+                      <FaUserFriends className='text-gray-600' />
+                      <span>{room.occupancy || (room.capacity ? `1-${room.capacity} persons` : '1-2 persons')}</span>
+                    </div>
                     {
-                      amenitiesList.map((amenity, index) => (
+                      staticAmenities.map((amenity, index) => (
                         <div key = {index} className='flex items-center gap-2'>
                           {amenity.icon} <span>{amenity.label} </span>
                         </div>

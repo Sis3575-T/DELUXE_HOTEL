@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import axios from 'axios'
 import { backendUrl } from '../App'
 import { MdAdd, MdEdit, MdDelete, MdCloudUpload, MdSearch, MdCheck } from 'react-icons/md'
@@ -36,6 +36,8 @@ const RoomManagement = ({ token }) => {
   const [amenityTitle, setAmenityTitle] = useState('')
   const [amenityDesc, setAmenityDesc] = useState('')
   const [amenityIcon, setAmenityIcon] = useState('')
+  const primaryDropRef = useRef(null)
+  const additionalDropRef = useRef(null)
   const [imageDragOver, setImageDragOver] = useState(false)
   const [imagesDragOver, setImagesDragOver] = useState(false)
   const [errors, setErrors] = useState({})
@@ -59,7 +61,47 @@ const RoomManagement = ({ token }) => {
 
   useEffect(() => { fetchRooms() }, [])
 
+  useEffect(() => {
+    if (!showModal) return
+    const docPrevent = (e) => { e.preventDefault() }
+    document.addEventListener('dragover', docPrevent, false)
+    document.addEventListener('drop', docPrevent, false)
 
+    const primary = primaryDropRef.current
+    const onPriOver = (e) => { e.preventDefault(); e.stopPropagation(); setImageDragOver(true) }
+    const onPriLeave = () => setImageDragOver(false)
+    const onPriDrop = (e) => { e.preventDefault(); e.stopPropagation(); setImageDragOver(false); const file = e.dataTransfer?.files?.[0]; if (file?.type?.startsWith('image/')) setImage(file) }
+    if (primary) {
+      primary.addEventListener('dragover', onPriOver)
+      primary.addEventListener('dragleave', onPriLeave)
+      primary.addEventListener('drop', onPriDrop)
+    }
+
+    const additional = additionalDropRef.current
+    const onAddOver = (e) => { e.preventDefault(); e.stopPropagation(); setImagesDragOver(true) }
+    const onAddLeave = () => setImagesDragOver(false)
+    const onAddDrop = (e) => { e.preventDefault(); e.stopPropagation(); setImagesDragOver(false); const files = Array.from(e.dataTransfer?.files || []).filter(f => f?.type?.startsWith('image/')); if (files.length > 0) setImages(prev => [...prev, ...files]) }
+    if (additional) {
+      additional.addEventListener('dragover', onAddOver)
+      additional.addEventListener('dragleave', onAddLeave)
+      additional.addEventListener('drop', onAddDrop)
+    }
+
+    return () => {
+      document.removeEventListener('dragover', docPrevent, false)
+      document.removeEventListener('drop', docPrevent, false)
+      if (primary) {
+        primary.removeEventListener('dragover', onPriOver)
+        primary.removeEventListener('dragleave', onPriLeave)
+        primary.removeEventListener('drop', onPriDrop)
+      }
+      if (additional) {
+        additional.removeEventListener('dragover', onAddOver)
+        additional.removeEventListener('dragleave', onAddLeave)
+        additional.removeEventListener('drop', onAddDrop)
+      }
+    }
+  }, [showModal])
 
   const openAdd = (e) => {
     if (e && e.preventDefault) e.preventDefault()
@@ -319,16 +361,15 @@ const RoomManagement = ({ token }) => {
         <form onSubmit={handleSubmit} className="flex flex-col" style={{ gap: '16px' }}>
           <div>
             <label className="block text-xs font-semibold mb-2" style={{ color: '#6B7280' }}>Room Images</label>
-            <label
+            <div
+              ref={primaryDropRef}
               className="flex flex-col items-center justify-center cursor-pointer transition-all rounded-lg mb-3"
               style={{
                 height: '120px',
-                border: `2px dashed ${imageDragOver ? '#D4AF37' : 'var(--border)'}`,
-                background: imageDragOver ? 'rgba(212, 175, 55, 0.05)' : 'var(--bg-subtle)'
+                border: `2px dashed ${imageDragOver ? '#D4AF37' : '#E5E7EB'}`,
+                background: imageDragOver ? 'rgba(212, 175, 55, 0.05)' : '#F8FAFC'
               }}
-              onDragOver={e => { e.preventDefault(); setImageDragOver(true) }}
-              onDragLeave={() => setImageDragOver(false)}
-              onDrop={e => { e.preventDefault(); setImageDragOver(false); const f = e.dataTransfer.files?.[0]; if (f?.type?.startsWith('image/')) setImage(f) }}
+              onClick={() => document.getElementById('primary-image-input')?.click()}
             >
               {image ? (
                 <img src={URL.createObjectURL(image)} alt="preview" className="h-full w-full object-cover rounded-lg" />
@@ -337,31 +378,31 @@ const RoomManagement = ({ token }) => {
               ) : (
                 <div className="text-center">
                   <MdCloudUpload size={28} style={{ color: '#D4AF37' }} className="mx-auto" />
-                  <p className="text-xs mt-2 font-medium" style={{ color: 'var(--text-muted)' }}>Primary image (required)</p>
+                  <p className="text-xs mt-2 font-medium" style={{ color: '#94A3B8' }}>Primary image (required)</p>
                 </div>
               )}
-              <input type="file" accept="image/*" className="hidden" onChange={e => setImage(e.target.files?.[0] ?? null)} />
-            </label>
-            <label
+              <input id="primary-image-input" type="file" accept="image/*" className="hidden" onChange={e => setImage(e.target.files?.[0] ?? null)} />
+            </div>
+            <div
+              ref={additionalDropRef}
               className="flex flex-col items-center justify-center cursor-pointer transition-all rounded-lg p-4"
               style={{
-                border: `2px dashed ${imagesDragOver ? '#D4AF37' : 'var(--border)'}`,
-                background: imagesDragOver ? 'rgba(212, 175, 55, 0.05)' : 'var(--bg-subtle)'
+                border: `2px dashed ${imagesDragOver ? '#D4AF37' : '#E5E7EB'}`,
+                background: imagesDragOver ? 'rgba(212, 175, 55, 0.05)' : '#F8FAFC'
               }}
-              onDragOver={e => { e.preventDefault(); setImagesDragOver(true) }}
-              onDragLeave={() => setImagesDragOver(false)}
-              onDrop={e => { e.preventDefault(); setImagesDragOver(false); const files = Array.from(e.dataTransfer.files || []).filter(f => f?.type?.startsWith('image/')); if (files.length > 0) setImages(prev => [...prev, ...files]) }}
+              onClick={() => document.getElementById('additional-images-input')?.click()}
             >
-              <MdCloudUpload size={22} style={{ color: 'var(--text-muted)' }} />
-              <p className="text-xs mt-1 font-medium" style={{ color: 'var(--text-muted)' }}>Add additional images (optional)</p>
+              <MdCloudUpload size={22} style={{ color: '#94A3B8' }} />
+              <p className="text-xs mt-1 font-medium" style={{ color: '#94A3B8' }}>Add additional images (optional)</p>
               <input
+                id="additional-images-input"
                 type="file"
                 accept="image/*"
                 multiple
                 className="hidden"
                 onChange={e => setImages(Array.from(e.target.files || []))}
               />
-            </label>
+            </div>
             {(images.length > 0 || editRoom?.images?.length > 0) && (
               <div className="flex flex-wrap gap-2 mt-3">
                 {images.map((file, i) => (

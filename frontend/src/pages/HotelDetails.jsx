@@ -52,7 +52,8 @@ const HotelDetails = () => {
           setFormData(prev => ({
             ...prev,
             roomName: fetched.name,
-            roomId: fetched._id
+            roomId: fetched._id,
+            guests: prev.guests > (fetched.capacity || 10) ? 1 : prev.guests
           }))
         }
       } catch (error) {
@@ -222,6 +223,9 @@ const HotelDetails = () => {
           <div>
             <h2 className="text-3xl font-bold">{room.name}</h2>
             <p className="text-xl text-lime-500 mt-1">${room.price} / night</p>
+            <p className="text-sm text-gray-500 mt-1">
+              {room.occupancy || (room.capacity ? `1-${room.capacity} persons` : '1-2 persons')} &middot; {room.roomType || 'Standard'}
+            </p>
           </div>
 
           <img src={room.image} alt={room.name} className="w-full rounded-lg shadow-md" onError={(e) => { e.target.style.display = 'none' }} />
@@ -318,7 +322,7 @@ const HotelDetails = () => {
                 value={formData.guests}
                 onChange={handleChange}
               >
-                {[...Array(10).keys()].map((i) => (
+                {[...Array(room.capacity || 10).keys()].map((i) => (
                   <option key={i + 1} value={i + 1}>{i + 1} Guest{i > 0 ? 's' : ''}</option>
                 ))}
               </select>
