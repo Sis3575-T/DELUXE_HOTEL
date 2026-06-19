@@ -8,7 +8,7 @@ import ListHotel from './pages/ListHotel.jsx'
 import Reservation from './pages/Reservation.jsx'
 
 
-export const backendUrl = 'http://localhost:4000'
+export const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 const App = () => {
   const [token, setToken] = useState('')
   return (

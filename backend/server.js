@@ -28,6 +28,17 @@ import paymentConfig from './config/payment.js'
 const app = express()
 const port = process.env.PORT || 4000
 
+const REQUIRED_ENV_VARS = ['MONGODB_URI', 'CLOUDINARY_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_SECRET_KEY', 'JWT_SECRET']
+const missing = REQUIRED_ENV_VARS.filter(k => !process.env[k])
+if (missing.length > 0) {
+  console.error('FATAL: Missing required environment variables:', missing.join(', '))
+  console.error('Set these in Render Dashboard → Environment before deploying.')
+}
+
+let dbConnected = false
+mongoose.connection.on('connected', () => { dbConnected = true })
+mongoose.connection.on('disconnected', () => { dbConnected = false })
+
 connectCloudinary()
 
 const seedAdmin = async () => {
@@ -57,15 +68,15 @@ const seedAdmin = async () => {
   }
 }
 
-connectDB().then(() => {
+const initDB = async () => {
+  await connectDB()
   if (mongoose.connection.readyState === 1) {
     seedAdmin()
   } else {
     mongoose.connection.once('connected', seedAdmin)
   }
-}).catch(() => {
-  mongoose.connection.once('connected', seedAdmin)
-})
+}
+initDB()
 
 const allowedOrigins = [
   'http://localhost:4000',
@@ -86,6 +97,9 @@ const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) return callback(null, true)
     if (allowedOrigins.includes(origin)) return callback(null, true)
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(`CORS: Blocked request from unknown origin: ${origin}`)
+    }
     callback(null, true)
   },
   credentials: true,
@@ -143,6 +157,26 @@ app.use('/api/payment', paymentRouter)
 
 app.get('/', (req, res) => {
   res.send("API working")
+})
+
+app.get('/api/health', (req, res) => {
+  const mongoState = mongoose.connection.readyState
+  const stateMap = { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' }
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    database: {
+      status: stateMap[mongoState] || 'unknown',
+      connected: dbConnected,
+    },
+    cloudinary: !!process.env.CLOUDINARY_NAME,
+    config: {
+      frontend_url: process.env.FRONTEND_URL || 'not set',
+      admin_url: process.env.ADMIN_URL || 'not set',
+      backend_url: process.env.BACKEND_URL || 'not set',
+    },
+  })
 })
 
 app.use((err, req, res, next) => {

@@ -8,14 +8,18 @@ services:
     startCommand: cd backend && npm start
     branch: main
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: BACKEND_URL
         value: https://abay-grand-hotel-nmn9.onrender.com
       - key: FRONTEND_URL
         value: https://abay-grand-hotel-w.vercel.app
       - key: ADMIN_URL
         value: https://abay-grand-hotel-admin.vercel.app
-      - key: NODE_ENV
-        value: production
+      - key: JWT_SECRET
+        value: demo
+      # IMPORTANT: Set MONGODB_URI in Render Dashboard → Environment
+      # (do not put database credentials in render.yaml)
 
   - type: static
     name: abay-grand-hotel-frontend
