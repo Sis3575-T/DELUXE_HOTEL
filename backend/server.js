@@ -74,8 +74,12 @@ const allowedOrigins = [
   'http://localhost:5174',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
+  'https://abay-grand-hotel-w.vercel.app',
+  'https://abay-grand-hotel-admin.vercel.app',
+  'https://abay-grand-hotel-nmn9.onrender.com',
   process.env.FRONTEND_URL,
   process.env.ADMIN_URL,
+  process.env.BACKEND_URL,
 ].filter(Boolean)
 
 const corsOptions = {

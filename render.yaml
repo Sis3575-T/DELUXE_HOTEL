@@ -1,20 +1,30 @@
 services:
   - type: web
-    name: deluxe-hotel-backend
+    name: abay-grand-hotel-backend
     env: node
     plan: free
     region: oregon
     buildCommand: cd backend && npm install
     startCommand: cd backend && npm start
-    repo: https://github.com/REPLACE_WITH_YOUR_REPO
     branch: main
+    envVars:
+      - key: BACKEND_URL
+        value: https://abay-grand-hotel-nmn9.onrender.com
+      - key: FRONTEND_URL
+        value: https://abay-grand-hotel-w.vercel.app
+      - key: ADMIN_URL
+        value: https://abay-grand-hotel-admin.vercel.app
+      - key: NODE_ENV
+        value: production
 
   - type: static
-    name: deluxe-hotel-frontend
+    name: abay-grand-hotel-frontend
     env: static
     plan: free
     region: oregon
     buildCommand: cd frontend && npm install && npm run build
     publishPath: frontend/dist
-    repo: https://github.com/REPLACE_WITH_YOUR_REPO
     branch: main
+    envVars:
+      - key: VITE_API_URL
+        value: https://abay-grand-hotel-nmn9.onrender.com
