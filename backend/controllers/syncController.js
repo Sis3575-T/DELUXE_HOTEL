@@ -14,6 +14,7 @@ import Activity from '../models/activityModels.js'
 import Newsletter from '../models/newsletterModels.js'
 import Notification from '../models/notificationModels.js'
 import Payment from '../models/paymentModels.js'
+import { resolveConnectionUri } from '../config/mongodb.js'
 
 const MODELS = [
   { name: 'hotels', model: Hotel },
@@ -42,7 +43,8 @@ async function withAtlasDb(fn) {
   if (!uri) throw new Error('ATLAS_MONGODB_URI not configured in backend/.env')
   let conn
   try {
-    conn = await mongoose.createConnection(uri).asPromise()
+    const resolvedUri = uri.startsWith('mongodb+srv://') ? await resolveConnectionUri(uri) : uri
+    conn = await mongoose.createConnection(resolvedUri).asPromise()
     await fn(conn)
   } finally {
     if (conn) await conn.close()

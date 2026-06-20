@@ -54,6 +54,8 @@ async function resolveConnectionUri(uri) {
     return `mongodb://${authSegment}${hosts}/${dbName}?${params}`
 }
 
+export { resolveConnectionUri }
+
 const connectDB = async () => {
     const uri = process.env.MONGODB_URI
     if (!uri) {
