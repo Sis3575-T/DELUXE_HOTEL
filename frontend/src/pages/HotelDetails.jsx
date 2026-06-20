@@ -5,17 +5,7 @@ import { backendUrl } from '../App'
 import { FaWifi, FaTv, FaUtensils, FaSwimmingPool, FaConciergeBell } from 'react-icons/fa'
 
 const PAYMENT_METHODS = [
-  { id: 'Chapa', name: 'Chapa', description: 'Pay with Chapa (Online)' },
   { id: 'pay_at_hotel', name: 'Pay at Hotel', description: 'Pay when you arrive' },
-]
-
-const CHAPA_CHANNELS = [
-  { id: 'Telebirr', name: 'Telebirr', description: 'Mobile Money' },
-  { id: 'CBE Birr', name: 'CBE Birr', description: 'Bank Mobile' },
-  { id: 'Visa', name: 'Visa', description: 'Credit/Debit Card' },
-  { id: 'MasterCard', name: 'MasterCard', description: 'Credit/Debit Card' },
-  { id: 'Mobile Banking', name: 'Mobile Banking', description: 'Bank App Transfer' },
-  { id: 'Internet Banking', name: 'Internet Banking', description: 'Online Banking' },
 ]
 
 const HotelDetails = () => {
@@ -28,8 +18,7 @@ const HotelDetails = () => {
   const [formErrors, setFormErrors] = useState({})
   const [availability, setAvailability] = useState({ checking: false, available: true, message: '' })
   const availabilityTimer = useRef(null)
-  const [paymentMethod, setPaymentMethod] = useState('Chapa')
-  const [selectedChannel, setSelectedChannel] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('pay_at_hotel')
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -154,38 +143,24 @@ const HotelDetails = () => {
         setNotification({ type: 'error', message: availCheck.data.message || 'This room is not available for the selected dates.' })
         return
       }
-      if (paymentMethod === 'Chapa') {
-        const response = await axios.post(`${backendUrl}/api/reservation/book-with-chapa`, {
-          ...formData,
-          paymentMethod: 'Chapa',
-          channels: selectedChannel ? [selectedChannel] : [],
-        })
-        if (response.data?.success && response.data?.checkoutUrl) {
-          window.location.href = response.data.checkoutUrl
-        } else {
-          setNotification({ type: 'error', message: response.data?.message || 'Failed to initiate payment' })
-        }
+      const response = await axios.post(`${backendUrl}/api/reservation/create`, formData)
+      if (response.data?.success) {
+        setNotification({ type: 'success', message: 'Reservation booked successfully! You can pay at the hotel.' })
+        setAvailability({ checking: false, available: true, message: '' })
+        setFormData(prev => ({
+          ...prev,
+          name: '',
+          email: '',
+          phone: '',
+          checkin: '',
+          checkout: '',
+          guests: 1
+        }))
       } else {
-        const response = await axios.post(`${backendUrl}/api/reservation/create`, formData)
-        if (response.data?.success) {
-          setNotification({ type: 'success', message: 'Reservation booked successfully! You can pay at the hotel.' })
-          setAvailability({ checking: false, available: true, message: '' })
-          setFormData(prev => ({
-            ...prev,
-            name: '',
-            email: '',
-            phone: '',
-            checkin: '',
-            checkout: '',
-            guests: 1
-          }))
-        } else {
-          setNotification({ type: 'error', message: response.data.message || 'Failed to create reservation' })
-        }
+        setNotification({ type: 'error', message: response.data.message || 'Failed to create reservation' })
       }
     } catch (error) {
       console.error('Booking error:', error)
-      console.error('Chapa error details:', error.response?.data)
       const msg = error.response?.data?.message || 'Error occurred while booking. Please try again.'
       setNotification({ type: 'error', message: msg })
     } finally {
@@ -360,71 +335,12 @@ const HotelDetails = () => {
               </div>
             )}
 
-            {bookingPrice && (
-              <div>
-                <label className="block text-sm font-bold mb-2">Payment Method</label>
-                <div className="space-y-2">
-                  {PAYMENT_METHODS.map(method => (
-                    <label
-                      key={method.id}
-                      className={`flex items-center gap-3 p-2.5 border rounded cursor-pointer transition-all ${
-                        paymentMethod === method.id ? 'border-lime-500 bg-lime-50' : 'border-gray-200 bg-white'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value={method.id}
-                        checked={paymentMethod === method.id}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
-                        className="accent-lime-600"
-                      />
-                      <div>
-                        <p className="text-sm font-medium">{method.name}</p>
-                        <p className="text-xs text-gray-500">{method.description}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {paymentMethod === 'Chapa' && bookingPrice && (
-              <div>
-                <label className="block text-sm font-bold mb-2">Payment Channel (optional)</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {CHAPA_CHANNELS.map(ch => (
-                    <label
-                      key={ch.id}
-                      className={`flex items-center gap-2 p-2 border rounded cursor-pointer transition-all text-xs ${
-                        selectedChannel === ch.id ? 'border-lime-500 bg-lime-50' : 'border-gray-200 bg-white'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="chapaChannel"
-                        value={ch.id}
-                        checked={selectedChannel === ch.id}
-                        onChange={(e) => setSelectedChannel(e.target.value)}
-                        className="accent-lime-600"
-                      />
-                      <div>
-                        <p className="font-medium">{ch.name}</p>
-                        <p className="text-[10px] text-gray-500">{ch.description}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                <p className="text-[10px] text-gray-400 mt-1">Selecting a channel takes you directly to that payment method on Chapa.</p>
-              </div>
-            )}
-
             <button
               className="w-full bg-lime-600 text-white p-2 rounded hover:bg-lime-700 transition-colors duration-200 disabled:opacity-60"
               type="submit"
               disabled={submitting || (!availability.checking && !availability.available)}
             >
-              {submitting ? 'Processing...' : !availability.available && !availability.checking ? 'Not Available' : paymentMethod === 'Chapa' ? 'Book & Pay Now' : 'Book Now'}
+              {submitting ? 'Processing...' : !availability.available && !availability.checking ? 'Not Available' : 'Book Now'}
             </button>
           </form>
         </aside>

@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   MdDashboard, MdHotel, MdEventNote, MdPeople, MdAttachMoney,
-  MdStar, MdMessage, MdSettings, MdLogout, MdMenu, MdClose,
-  MdChevronLeft, MdPayment
+  MdStar, MdMessage, MdSettings, MdSync, MdLogout, MdMenu, MdClose,
+  MdChevronLeft
 } from 'react-icons/md'
 import { useTheme, useSettings } from '../App'
 
@@ -13,10 +13,10 @@ const navItems = [
   { to: '/reservation', icon: MdEventNote,   label: 'Reservations' },
   { to: '/guests',      icon: MdPeople,      label: 'Guests' },
   { to: '/revenue',     icon: MdAttachMoney, label: 'Revenue' },
-  { to: '/payments',    icon: MdPayment,     label: 'Payments' },
   { to: '/reviews',     icon: MdStar,        label: 'Reviews' },
   { to: '/messages',    icon: MdMessage,     label: 'Messages' },
   { to: '/settings',    icon: MdSettings,    label: 'Settings' },
+  { to: '/sync',        icon: MdSync,        label: 'DB Sync' },
 ]
 
 const Sidebar = ({ setToken }) => {

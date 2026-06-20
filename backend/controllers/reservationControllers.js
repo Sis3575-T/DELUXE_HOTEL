@@ -5,7 +5,7 @@ import paymentConfig from '../config/payment.js'
 import { logActivity } from './activityControllers.js'
 import { createNotification } from './notificationControllers.js'
 import { calculateBookingPrice } from '../utils/pricing.js'
-import { initializeTransaction as chapaInitialize, generateTxRef } from '../utils/chapa.js'
+import { initializeTransaction as chapaInitialize, generateTxRef, directCharge as chapaDirectCharge, isMobileMoneyChannel, getDirectChargeType } from '../utils/chapa.js'
 
 const toStr = (v) => {
   if (!v) return ''
@@ -576,6 +576,12 @@ const bookWithChapa = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Only Chapa payment is supported at this endpoint' })
     }
 
+    const selectedChannel = Array.isArray(channels) && channels.length === 1 ? channels[0] : ''
+    const isMobileMoney = selectedChannel && isMobileMoneyChannel(selectedChannel)
+    if (isMobileMoney && !phone) {
+      return res.status(400).json({ success: false, message: 'Phone number is required for mobile money payments' })
+    }
+
     let resolvedRoomId = roomId ? String(roomId) : ''
     if (!resolvedRoomId && roomName) {
       const hotel = await hotelModel.findOne({ name: roomName })
@@ -629,8 +635,6 @@ const bookWithChapa = async (req, res) => {
     await newReservation.save()
     console.log('[bookWithChapa] Reservation created:', newReservation._id)
 
-    const selectedChannel = Array.isArray(channels) && channels.length === 1 ? channels[0] : ''
-
     const payment = new Payment({
       transactionId: tx_ref,
       bookingId: newReservation._id,
@@ -648,105 +652,197 @@ const bookWithChapa = async (req, res) => {
     await payment.save()
     console.log('[bookWithChapa] Payment record created:', payment._id, 'tx_ref:', tx_ref, 'channel:', selectedChannel)
 
-    const chapaPayload = {
-      amount: pricing.totalAmount,
-      currency: 'ETB',
-      email: email || '',
-      first_name: name.split(' ')[0] || name,
-      last_name: name.split(' ').slice(1).join(' ') || '',
-      tx_ref,
-      callback_url: paymentConfig.chapaCallbackUrl,
-      return_url: paymentConfig.chapaReturnUrl,
-      customization: {
-        title: 'Hotel Booking',
-        description: `Payment for ${roomName} - ${name}`,
-      },
-    }
-
-    if (Array.isArray(channels) && channels.length > 0) {
-      chapaPayload.options = { channels }
-    }
-
-    console.log('[bookWithChapa] Chapa payload:', JSON.stringify(chapaPayload, null, 2))
-
     let chapaResult
-    try {
-      chapaResult = await chapaInitialize(chapaPayload)
-      console.log('[bookWithChapa] Chapa initialization SUCCESS:', JSON.stringify(chapaResult, null, 2))
-    } catch (chapaError) {
-      const chapaMsg = toStr(chapaError?.chapaData?.message) || toStr(chapaError?.chapaData?.msg) || toStr(chapaError?.message) || 'Unknown error'
-      const chapaDetail = toStr(chapaError?.chapaData?.detail) || ''
-      console.error('[bookWithChapa] Chapa initialization FAILED:')
-      console.error('  Status:', chapaError?.status)
-      console.error('  Message:', chapaMsg)
-      console.error('  Detail:', chapaDetail)
-      console.error('  Full Chapa response:', JSON.stringify(chapaError?.chapaData, null, 2))
-      console.error('  Validation errors:', chapaError?.validationErrors)
-      console.error('  Config errors:', chapaError?.configErrors)
+    let isDirectCharge = false
+    let directChargeRef = ''
 
-      payment.status = 'Failed'
-      payment.chapaResponse = chapaError?.chapaData || {
-        error: chapaError?.message || String(chapaError),
-        validationErrors: chapaError?.validationErrors,
-        configErrors: chapaError?.configErrors,
+    if (isMobileMoney) {
+      isDirectCharge = true
+      const dcType = getDirectChargeType(selectedChannel)
+      const dcPayload = {
+        type: dcType,
+        amount: pricing.totalAmount,
+        currency: 'ETB',
+        email: email || '',
+        first_name: name.split(' ')[0] || name,
+        last_name: name.split(' ').slice(1).join(' ') || '',
+        tx_ref,
+        mobile: phone,
+        callback_url: paymentConfig.chapaCallbackUrl,
+        return_url: paymentConfig.chapaReturnUrl,
       }
-      payment.notes = 'Chapa initialization failed: ' + chapaMsg + (chapaDetail ? ' - ' + chapaDetail : '')
-      await payment.save()
-      await Reservation.findByIdAndDelete(newReservation._id)
 
-      const errParts = [chapaMsg]
-      if (chapaDetail) errParts.push(chapaDetail)
-      return res.status(chapaError?.status || 502).json({
-        success: false,
-        message: errParts.join('. '),
-        error: chapaError?.chapaData || chapaError?.message || String(chapaError),
-        validationErrors: chapaError?.validationErrors,
-        status: chapaError?.status || 502,
+      console.log('[bookWithChapa] Direct charge payload:', JSON.stringify(dcPayload, null, 2))
+
+      try {
+        chapaResult = await chapaDirectCharge(dcPayload)
+        console.log('[bookWithChapa] Direct charge SUCCESS:', JSON.stringify(chapaResult, null, 2))
+
+        directChargeRef = chapaResult.data?.reference || chapaResult.data?.ref || ''
+        if (!directChargeRef) {
+          console.error('[bookWithChapa] No reference in direct charge response:', JSON.stringify(chapaResult))
+          payment.status = 'Failed'
+          payment.notes = 'No payment reference from Chapa direct charge'
+          await payment.save()
+          await Reservation.findByIdAndDelete(newReservation._id)
+          return res.status(502).json({
+            success: false,
+            message: 'Payment gateway returned no reference. Please try again.',
+            chapaResponse: chapaResult,
+          })
+        }
+      } catch (chapaError) {
+        const chapaMsg = toStr(chapaError?.chapaData?.message) || toStr(chapaError?.chapaData?.msg) || toStr(chapaError?.message) || 'Unknown error'
+        const chapaDetail = toStr(chapaError?.chapaData?.detail) || ''
+        console.error('[bookWithChapa] Direct charge FAILED:')
+        console.error('  Status:', chapaError?.status)
+        console.error('  Message:', chapaMsg)
+        console.error('  Detail:', chapaDetail)
+
+        payment.status = 'Failed'
+        payment.chapaResponse = chapaError?.chapaData || { error: chapaError?.message || String(chapaError) }
+        payment.notes = 'Chapa direct charge failed: ' + chapaMsg + (chapaDetail ? ' - ' + chapaDetail : '')
+        await payment.save()
+        await Reservation.findByIdAndDelete(newReservation._id)
+
+        return res.status(chapaError?.status || 502).json({
+          success: false,
+          message: chapaMsg + (chapaDetail ? '. ' + chapaDetail : ''),
+          error: chapaError?.chapaData || chapaError?.message || String(chapaError),
+          status: chapaError?.status || 502,
+        })
+      }
+    } else {
+      const chapaPayload = {
+        amount: pricing.totalAmount,
+        currency: 'ETB',
+        email: email || '',
+        first_name: name.split(' ')[0] || name,
+        last_name: name.split(' ').slice(1).join(' ') || '',
+        tx_ref,
+        callback_url: paymentConfig.chapaCallbackUrl,
+        return_url: paymentConfig.chapaReturnUrl,
+        customization: {
+          title: 'Hotel Booking',
+          description: `Payment for ${roomName} - ${name}`,
+        },
+      }
+
+      if (Array.isArray(channels) && channels.length > 0) {
+        chapaPayload.options = { channels }
+      }
+
+      console.log('[bookWithChapa] Chapa payload:', JSON.stringify(chapaPayload, null, 2))
+
+      try {
+        chapaResult = await chapaInitialize(chapaPayload)
+        console.log('[bookWithChapa] Chapa initialization SUCCESS:', JSON.stringify(chapaResult, null, 2))
+      } catch (chapaError) {
+        const chapaMsg = toStr(chapaError?.chapaData?.message) || toStr(chapaError?.chapaData?.msg) || toStr(chapaError?.message) || 'Unknown error'
+        const chapaDetail = toStr(chapaError?.chapaData?.detail) || ''
+        console.error('[bookWithChapa] Chapa initialization FAILED:')
+        console.error('  Status:', chapaError?.status)
+        console.error('  Message:', chapaMsg)
+        console.error('  Detail:', chapaDetail)
+        console.error('  Full Chapa response:', JSON.stringify(chapaError?.chapaData, null, 2))
+        console.error('  Validation errors:', chapaError?.validationErrors)
+        console.error('  Config errors:', chapaError?.configErrors)
+
+        payment.status = 'Failed'
+        payment.chapaResponse = chapaError?.chapaData || {
+          error: chapaError?.message || String(chapaError),
+          validationErrors: chapaError?.validationErrors,
+          configErrors: chapaError?.configErrors,
+        }
+        payment.notes = 'Chapa initialization failed: ' + chapaMsg + (chapaDetail ? ' - ' + chapaDetail : '')
+        await payment.save()
+        await Reservation.findByIdAndDelete(newReservation._id)
+
+        const errParts = [chapaMsg]
+        if (chapaDetail) errParts.push(chapaDetail)
+        return res.status(chapaError?.status || 502).json({
+          success: false,
+          message: errParts.join('. '),
+          error: chapaError?.chapaData || chapaError?.message || String(chapaError),
+          validationErrors: chapaError?.validationErrors,
+          status: chapaError?.status || 502,
+        })
+      }
+
+      payment.chapaResponse = chapaResult
+      await payment.save()
+
+      const checkoutUrl = chapaResult.data?.checkout_url || null
+      if (!checkoutUrl) {
+        console.error('[bookWithChapa] No checkout_url in Chapa response:', JSON.stringify(chapaResult))
+        payment.status = 'Failed'
+        payment.notes = 'No checkout URL from Chapa'
+        await payment.save()
+        await Reservation.findByIdAndDelete(newReservation._id)
+        return res.status(502).json({
+          success: false,
+          message: 'Payment gateway returned no checkout URL. Please try again.',
+          chapaResponse: chapaResult,
+        })
+      }
+
+      console.log('[bookWithChapa] Checkout URL:', checkoutUrl)
+
+      logActivity({
+        action: 'Booking with Chapa',
+        userId: email || '',
+        userName: name,
+        userRole: 'Client',
+        reservationId: newReservation._id.toString(),
+        guestName: name,
+        details: `Booking created for ${name} at ${roomName} with Chapa payment. Total: ${pricing.totalAmount} ETB`,
+      })
+      createNotification({
+        type: 'booking_chapa_initiated',
+        message: `New Chapa payment initiated: ${name} - ${roomName} - ${pricing.totalAmount} ETB`,
+        relatedId: newReservation._id.toString(),
+        relatedModel: 'Reservation',
+      })
+
+      return res.json({
+        success: true,
+        message: 'Booking created. Redirecting to payment...',
+        reservation: newReservation,
+        payment: payment.toObject(),
+        checkoutUrl,
+        tx_ref,
       })
     }
 
     payment.chapaResponse = chapaResult
+    payment.chapaTransactionId = directChargeRef
+    payment.notes = `Direct charge initiated via ${selectedChannel}`
     await payment.save()
-
-    const checkoutUrl = chapaResult.data?.checkout_url || null
-    if (!checkoutUrl) {
-      console.error('[bookWithChapa] No checkout_url in Chapa response:', JSON.stringify(chapaResult))
-      payment.status = 'Failed'
-      payment.notes = 'No checkout URL from Chapa'
-      await payment.save()
-      await Reservation.findByIdAndDelete(newReservation._id)
-      return res.status(502).json({
-        success: false,
-        message: 'Payment gateway returned no checkout URL. Please try again.',
-        chapaResponse: chapaResult,
-      })
-    }
-
-    console.log('[bookWithChapa] Checkout URL:', checkoutUrl)
+    console.log('[bookWithChapa] Payment saved with direct charge ref:', directChargeRef)
 
     logActivity({
-      action: 'Booking with Chapa',
+      action: 'Booking with Chapa Direct Charge',
       userId: email || '',
       userName: name,
       userRole: 'Client',
       reservationId: newReservation._id.toString(),
       guestName: name,
-      details: `Booking created for ${name} at ${roomName} with Chapa payment. Total: ${pricing.totalAmount} ETB`,
+      details: `Booking created for ${name} at ${roomName} with ${selectedChannel} direct charge. Total: ${pricing.totalAmount} ETB`,
     })
     createNotification({
-      type: 'booking_chapa_initiated',
-      message: `New Chapa payment initiated: ${name} - ${roomName} - ${pricing.totalAmount} ETB`,
+      type: 'booking_chapa_direct_initiated',
+      message: `Direct charge initiated: ${name} - ${roomName} - ${pricing.totalAmount} ETB via ${selectedChannel}`,
       relatedId: newReservation._id.toString(),
       relatedModel: 'Reservation',
     })
 
     res.json({
       success: true,
-      message: 'Booking created. Redirecting to payment...',
-      reservation: newReservation,
-      payment: payment.toObject(),
-      checkoutUrl,
+      message: `Payment request sent to your phone via ${selectedChannel}. Check your phone and complete the payment.`,
+      paymentType: 'direct_charge',
+      channel: selectedChannel,
       tx_ref,
+      reference: directChargeRef,
     })
   } catch (error) {
     console.error('[bookWithChapa] Unhandled error:', error?.message || error)

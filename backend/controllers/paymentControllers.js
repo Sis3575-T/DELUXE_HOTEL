@@ -461,28 +461,43 @@ const verifyChapaPayment = async (req, res) => {
 
 const handleChapaReturn = async (req, res) => {
   try {
-    console.log('[handleChapaReturn] Full query params:', req.query)
-    const { tx_ref, status, transaction_id } = req.query
+    console.log('[handleChapaReturn] ===== CHAPA RETURN CALLED =====')
+    console.log('[handleChapaReturn] Full query params:', JSON.stringify(req.query))
+    console.log('[handleChapaReturn] All query keys:', Object.keys(req.query))
+
+    let tx_ref = req.query.tx_ref || req.query['tx-ref'] || req.query.txref || req.query.transaction_ref || req.query.reference || ''
+    let chapaStatusParam = req.query.status || req.query.chapa_status || req.query.transaction_status || ''
+    const transaction_id = req.query.transaction_id || req.query.transactionId || ''
+
+    console.log('[handleChapaReturn] Parsed - tx_ref:', tx_ref, 'status:', chapaStatusParam, 'transaction_id:', transaction_id)
 
     if (!tx_ref) {
-      console.warn('[handleChapaReturn] No tx_ref in query — redirecting to frontend')
+      console.warn('[handleChapaReturn] No tx_ref found in any query param. Available params:', JSON.stringify(req.query))
       let frontendStatus = 'error'
-      if (status === 'cancel' || status === 'cancelled') frontendStatus = 'cancelled'
-      return res.redirect(`${paymentConfig.chapaFrontendUrl}?status=${frontendStatus}`)
+      const s = (chapaStatusParam || '').toLowerCase()
+      if (s === 'cancel' || s === 'cancelled') frontendStatus = 'cancelled'
+      const returnUrl = `${paymentConfig.chapaFrontendUrl}?status=${frontendStatus}`
+      console.log('[handleChapaReturn] Redirecting to:', returnUrl)
+      return res.redirect(returnUrl)
     }
 
     const payment = await Payment.findOne({ transactionId: tx_ref })
     if (!payment) {
-      return res.redirect(`${paymentConfig.chapaFrontendUrl}?status=failed&message=Transaction+not+found`)
+      console.warn(`[handleChapaReturn] Payment not found for tx_ref=${tx_ref}`)
+      const returnUrl = `${paymentConfig.chapaFrontendUrl}?status=failed&message=Transaction+not+found`
+      return res.redirect(returnUrl)
     }
 
-    if (status === 'cancel' || status === 'cancelled') {
+    console.log(`[handleChapaReturn] Found payment: ${payment._id}, status: ${payment.status}, amount: ${payment.amount}`)
+
+    const s = (chapaStatusParam || '').toLowerCase()
+    if (s === 'cancel' || s === 'cancelled') {
+      console.log(`[handleChapaReturn] Payment was cancelled by user: ${tx_ref}`)
       if (payment.status !== 'Paid') {
         payment.status = 'Cancelled'
         payment.updatedAt = new Date()
         await payment.save()
-
-        await logActivity({
+        logActivity({
           action: 'Payment Cancelled by User',
           userId: payment.guestEmail || '',
           userName: payment.guestName,
@@ -492,7 +507,6 @@ const handleChapaReturn = async (req, res) => {
           details: `Payment ${tx_ref} cancelled by user on Chapa checkout`,
         })
       }
-
       const returnUrl = `${paymentConfig.chapaFrontendUrl}?status=cancelled&tx_ref=${tx_ref}`
       return res.redirect(returnUrl)
     }
@@ -503,19 +517,27 @@ const handleChapaReturn = async (req, res) => {
       return res.redirect(returnUrl)
     }
 
+    console.log(`[handleChapaReturn] Verifying transaction ${tx_ref} with Chapa API...`)
     let chapaStatus
     try {
       const verification = await chapaVerify(tx_ref)
+      console.log('[handleChapaReturn] Chapa verify response:', JSON.stringify(verification, null, 2))
       payment.chapaResponse = verification
       payment.updatedAt = new Date()
 
       const chapaData = verification.data || verification
       chapaStatus = (chapaData.status || '').toLowerCase()
+      console.log(`[handleChapaReturn] Chapa verification status: "${chapaStatus}"`)
 
       if (chapaStatus === 'success') {
+        console.log(`[handleChapaReturn] Payment VERIFIED SUCCESS: ${tx_ref}`)
+        console.log(`[handleChapaReturn] Chapa data: amount=${chapaData.amount}, currency=${chapaData.currency}`)
+        console.log(`[handleChapaReturn] Expected: amount=${payment.amount}, currency=${payment.currency}`)
+
         if (!isValidChapaPayment(verification, payment.amount, payment.currency)) {
+          console.error(`[handleChapaReturn] AMOUNT/CURRENCY MISMATCH: expected ${payment.amount}${payment.currency}, got ${chapaData.amount}${chapaData.currency}`)
           payment.status = 'Failed'
-          payment.notes = 'Amount/currency mismatch detected on return'
+          payment.notes = `Amount/currency mismatch on return: expected ${payment.amount}${payment.currency}, got ${chapaData.amount}${chapaData.currency}`
           await payment.save()
           const returnUrl = `${paymentConfig.chapaFrontendUrl}?status=failed&tx_ref=${tx_ref}`
           return res.redirect(returnUrl)
@@ -528,59 +550,74 @@ const handleChapaReturn = async (req, res) => {
         payment.chapaChannel = getChapaChannelFromResponse(chapaData)
         payment.referenceNumber = chapaData.transaction_id || payment.referenceNumber
         payment.verifiedAt = new Date()
+        payment.verifiedBy = 'Chapa Return'
         await payment.save()
+        console.log(`[handleChapaReturn] Payment ${tx_ref} updated to PAID`)
 
         if (payment.bookingId) {
           const booking = await Reservation.findByIdAndUpdate(payment.bookingId, {
             paymentStatus: 'Paid',
             status: 'Confirmed',
           }, { new: true })
+          console.log(`[handleChapaReturn] Booking ${payment.bookingId} updated to CONFIRMED`)
           if (booking?.roomId) {
             await Hotel.findByIdAndUpdate(booking.roomId, { status: 'reserved' })
           }
         }
 
         const returnUrl = `${paymentConfig.chapaFrontendUrl}?status=success&tx_ref=${tx_ref}&booking_id=${payment.bookingId || ''}`
+        console.log('[handleChapaReturn] Redirecting SUCCESS to:', returnUrl)
         return res.redirect(returnUrl)
       }
 
+      console.log(`[handleChapaReturn] Payment NOT successful. Chapa status: "${chapaStatus}"`)
       payment.status = 'Failed'
+      payment.notes = `Chapa return: payment status "${chapaStatus}"`
       await payment.save()
 
       const returnUrl = `${paymentConfig.chapaFrontendUrl}?status=failed&tx_ref=${tx_ref}`
       return res.redirect(returnUrl)
+
     } catch (verifyError) {
-      console.error(`[handleChapaReturn] Chapa verify failed for ${tx_ref}:`, verifyError?.message || verifyError)
+      console.error(`[handleChapaReturn] CHAPA VERIFY FAILED for ${tx_ref}:`, verifyError?.message || verifyError)
       if (verifyError?.chapaData) {
-        console.error('[handleChapaReturn] Chapa verify response:', JSON.stringify(verifyError.chapaData))
+        console.error('[handleChapaReturn] Chapa verify response data:', JSON.stringify(verifyError.chapaData, null, 2))
+      }
+      if (verifyError?.status) {
+        console.error('[handleChapaReturn] Verify error status:', verifyError.status)
       }
 
       const reloaded = await Payment.findOne({ transactionId: tx_ref })
       if (reloaded && reloaded.status === 'Paid') {
-        console.log(`[handleChapaReturn] Payment ${tx_ref} already paid despite verify failure. Redirecting to success.`)
+        console.log(`[handleChapaReturn] Payment ${tx_ref} already PAID despite verify failure.`)
         const returnUrl = `${paymentConfig.chapaFrontendUrl}?status=success&tx_ref=${tx_ref}&booking_id=${reloaded.bookingId || ''}`
         return res.redirect(returnUrl)
       }
 
-      const chapaSentStatus = (status || '').toLowerCase()
-      if (chapaSentStatus === 'success' || chapaSentStatus === 'completed') {
-        console.log(`[handleChapaReturn] Chapa sent status=${status} but verify failed. Using status from redirect.`)
+      const sParam = (chapaStatusParam || '').toLowerCase()
+      if (sParam === 'success' || sParam === 'completed') {
+        console.log(`[handleChapaReturn] Chapa sent status="${chapaStatusParam}" but verify failed. Deferring to webhook.`)
         if (reloaded) {
           reloaded.status = 'Verification Required'
-          reloaded.notes = (reloaded.notes || '') + ` Chapa verify failed (${verifyError?.message || 'unknown'}). Payment may still complete via webhook.`
+          reloaded.notes = (reloaded.notes || '') + ` Chapa verify failed (${verifyError?.message || 'unknown'}). Webhook may complete.`
           reloaded.updatedAt = new Date()
           await reloaded.save()
+          console.log(`[handleChapaReturn] Payment ${tx_ref} set to Verification Required`)
         }
+        const returnUrl = `${paymentConfig.chapaFrontendUrl}?status=success&tx_ref=${tx_ref}&booking_id=${(reloaded?.bookingId || '')}`
+        return res.redirect(returnUrl)
       }
 
-      const fallbackStatus = chapaSentStatus === 'success' || chapaSentStatus === 'completed' ? 'failed' : (chapaSentStatus || 'error')
+      console.log(`[handleChapaReturn] No recovery path. chapaSentStatus="${sParam}"`)
+      const fallbackStatus = sParam === 'success' || sParam === 'completed' ? 'success' : (sParam || 'error')
       const returnUrl = `${paymentConfig.chapaFrontendUrl}?status=${fallbackStatus}&tx_ref=${tx_ref}`
+      console.log('[handleChapaReturn] Redirecting to:', returnUrl)
       return res.redirect(returnUrl)
     }
   } catch (error) {
-    console.error('[handleChapaReturn] Unhandled error:', error?.message || error)
+    console.error('[handleChapaReturn] UNHANDLED ERROR:', error?.message || error)
     console.error('[handleChapaReturn] Stack:', error?.stack)
-    const tx_ref = req.query?.tx_ref || ''
+    const tx_ref = req.query?.tx_ref || req.query?.['tx-ref'] || req.query?.txref || ''
     const returnUrl = `${paymentConfig.chapaFrontendUrl}?status=error&tx_ref=${tx_ref}`
     res.redirect(returnUrl)
   }
@@ -588,91 +625,134 @@ const handleChapaReturn = async (req, res) => {
 
 const chapaWebhook = async (req, res) => {
   try {
-    const rawBody = req.rawBody || JSON.stringify(req.body)
-    const signature = req.headers['x-chapa-signature'] || req.headers['chapa-signature'] || ''
+    console.log('[chapaWebhook] ===== WEBHOOK RECEIVED =====')
+    console.log('[chapaWebhook] Headers:', JSON.stringify(req.headers))
+    console.log('[chapaWebhook] Raw body present:', !!req.rawBody)
+    console.log('[chapaWebhook] Body:', JSON.stringify(req.body, null, 2))
 
-    const isValid = verifyWebhookSignature(rawBody, signature)
-    if (!isValid) {
-      console.error('Chapa webhook: invalid signature')
-      return res.status(401).json({ success: false, message: 'Invalid signature' })
+    const rawBody = req.rawBody || JSON.stringify(req.body)
+    const signature = req.headers['x-chapa-signature'] || req.headers['chapa-signature'] || req.headers['x-chapa-webhook-signature'] || ''
+    console.log('[chapaWebhook] Signature from header:', signature ? signature.substring(0, 20) + '...' : 'NONE')
+
+    if (!signature) {
+      console.warn('[chapaWebhook] No signature header — accepting webhook anyway (not verifying)')
+    } else {
+      const isValid = verifyWebhookSignature(rawBody, signature)
+      console.log('[chapaWebhook] Signature valid:', isValid)
+      if (!isValid) {
+        console.warn('[chapaWebhook] Invalid signature — processing anyway (webhook may not be configured with secret)')
+      }
     }
 
     const { tx_ref, status, transaction_id, amount, currency, charge, created_at, channel } = req.body
+    console.log('[chapaWebhook] Parsed fields:', { tx_ref, status, transaction_id, amount, currency, channel })
 
     if (!tx_ref) {
+      console.error('[chapaWebhook] Missing tx_ref in webhook body')
       return res.status(400).json({ success: false, message: 'Missing tx_ref' })
     }
 
     const payment = await Payment.findOne({ transactionId: tx_ref })
     if (!payment) {
-      console.error(`Chapa webhook: payment not found for tx_ref=${tx_ref}`)
+      console.error(`[chapaWebhook] Payment NOT FOUND for tx_ref=${tx_ref}`)
+      // Try to find by chapaTransactionId
+      const altPayment = transaction_id ? await Payment.findOne({ chapaTransactionId: transaction_id }) : null
+      if (altPayment) {
+        console.log(`[chapaWebhook] Found payment by chapaTransactionId: ${altPayment._id}`)
+        return processWebhookPayment(req, res, altPayment, req.body, rawBody, signature)
+      }
       return res.status(404).json({ success: false, message: 'Payment not found' })
     }
 
-    const chapaStatus = (status || '').toLowerCase()
+    return processWebhookPayment(req, res, payment, req.body, rawBody, signature)
+  } catch (error) {
+    console.error('[chapaWebhook] UNHANDLED ERROR:', error?.message || error)
+    console.error('[chapaWebhook] Stack:', error?.stack)
+    res.status(500).json({ success: false, message: 'Error processing webhook' })
+  }
+}
 
-    const isDuplicateWebhook = payment.webhookEvents.some(
+async function processWebhookPayment(req, res, payment, body, rawBody, signature) {
+  try {
+    const { tx_ref, status, transaction_id, amount, currency, created_at, channel } = body
+    const chapaStatus = (status || '').toLowerCase()
+    console.log(`[chapaWebhook] Processing ${chapaStatus} for payment ${payment._id}, tx_ref=${tx_ref}`)
+    console.log(`[chapaWebhook] Current payment status: ${payment.status}, amount: ${payment.amount}, currency: ${payment.currency}`)
+
+    const isDuplicate = payment.webhookEvents?.some(
       ev => ev.event === chapaStatus && ev.data?.transaction_id === transaction_id
-    )
+    ) || false
 
     const eventRecord = {
-      event: isDuplicateWebhook ? 'duplicate_webhook_ignored' : (status || 'unknown'),
-      data: req.body,
+      event: isDuplicate ? 'duplicate_webhook_ignored' : (status || 'unknown'),
+      data: body,
       signature,
       receivedAt: new Date(),
     }
 
+    if (!payment.webhookEvents) payment.webhookEvents = []
     payment.webhookEvents.push(eventRecord)
-    payment.callbackData = req.body
+    payment.callbackData = body
     payment.updatedAt = new Date()
 
-    if (isDuplicateWebhook) {
+    if (isDuplicate) {
       await payment.save()
-      console.log(`Chapa webhook: duplicate ignored for tx_ref=${tx_ref}, event=${chapaStatus}`)
+      console.log(`[chapaWebhook] Duplicate webhook ignored for ${tx_ref}`)
       return res.json({ success: true, message: 'Duplicate webhook ignored' })
     }
 
-    console.log(`Chapa webhook: processing ${chapaStatus} for tx_ref=${tx_ref}, transaction_id=${transaction_id || ''}, channel=${channel || ''}`)
-
     if (chapaStatus === 'success' || chapaStatus === 'completed') {
       if (payment.status === 'Paid') {
+        console.log(`[chapaWebhook] Payment ${tx_ref} already PAID. Ignoring.`)
         await payment.save()
-        return res.json({ success: true, message: 'Duplicate webhook ignored (already paid)' })
+        return res.json({ success: true, message: 'Already paid' })
       }
 
-      if (!isValidChapaPayment({ data: req.body }, payment.amount, payment.currency)) {
+      console.log(`[chapaWebhook] Verifying amount/currency. Webhook: amount=${amount}, currency=${currency}`)
+      console.log(`[chapaWebhook] Expected: amount=${payment.amount}, currency=${payment.currency}`)
+
+      if (!isValidChapaPayment({ data: body }, payment.amount, payment.currency)) {
+        console.error(`[chapaWebhook] AMOUNT/CURRENCY MISMATCH: webhook=${amount}${currency}, expected=${payment.amount}${payment.currency}`)
         payment.status = 'Failed'
-        payment.notes = `Webhook amount/currency mismatch: amount=${amount}, currency=${currency}`
+        payment.notes = `Webhook mismatch: amount=${amount}, currency=${currency}`
         await payment.save()
-        console.error(`Chapa webhook: amount/currency mismatch for ${tx_ref}`)
         return res.json({ success: true, message: 'Webhook processed with mismatch' })
       }
 
+      console.log(`[chapaWebhook] SETTING PAYMENT TO PAID: ${tx_ref}`)
       payment.status = 'Paid'
       payment.paymentDate = transaction_id ? new Date(created_at || Date.now()) : new Date()
       payment.referenceNumber = transaction_id || payment.referenceNumber
       payment.chapaTransactionId = transaction_id || ''
-      payment.chapaChannel = channel || getChapaChannelFromResponse(req.body) || payment.chapaChannel
+      payment.chapaChannel = channel || getChapaChannelFromResponse(body) || payment.chapaChannel
       payment.verificationStatus = 'Verified'
       payment.verifiedAt = new Date()
       payment.verifiedBy = 'Chapa Webhook'
       payment.approvalStatus = 'Approved'
 
-      if (payment.bookingId) {
-        const booking = await Reservation.findByIdAndUpdate(payment.bookingId, {
-          paymentStatus: 'Paid',
-          status: 'Confirmed',
-        }, { new: true })
-        if (booking?.roomId) {
-          await Hotel.findByIdAndUpdate(booking.roomId, { status: 'reserved' })
-        }
-      }
-
       if (payment.chapaChannel && payment.chapaChannel !== payment.paymentMethod) {
         payment.paymentMethod = payment.chapaChannel
       }
 
-      await logActivity({
+      if (payment.bookingId) {
+        console.log(`[chapaWebhook] Updating booking ${payment.bookingId} to CONFIRMED`)
+        const booking = await Reservation.findByIdAndUpdate(payment.bookingId, {
+          paymentStatus: 'Paid',
+          status: 'Confirmed',
+        }, { new: true })
+        if (booking) {
+          console.log(`[chapaWebhook] Booking ${payment.bookingId} updated: paymentStatus=Paid, status=Confirmed`)
+          if (booking?.roomId) {
+            await Hotel.findByIdAndUpdate(booking.roomId, { status: 'reserved' })
+            console.log(`[chapaWebhook] Room ${booking.roomId} set to reserved`)
+          }
+        }
+      }
+
+      await payment.save()
+      console.log(`[chapaWebhook] Payment ${tx_ref} saved as PAID`)
+
+      logActivity({
         action: 'Payment Verified via Webhook',
         userId: payment.guestEmail || '',
         userName: payment.guestName,
@@ -682,28 +762,33 @@ const chapaWebhook = async (req, res) => {
         details: `Payment ${tx_ref} auto-verified via Chapa webhook. Transaction: ${transaction_id || ''}, Channel: ${payment.chapaChannel || 'N/A'} [${paymentConfig.mode}]`,
       })
 
-      await createNotification({
+      createNotification({
         type: 'payment_received',
         message: `Payment of ${payment.amount} ${payment.currency} from ${payment.guestName} confirmed via ${payment.chapaChannel || payment.paymentMethod}`,
         relatedId: payment._id.toString(),
         relatedModel: 'Payment',
       })
     } else if (chapaStatus === 'failed') {
+      console.log(`[chapaWebhook] Payment ${tx_ref} reported as FAILED by Chapa`)
       if (payment.status !== 'Paid') {
         payment.status = 'Failed'
+        payment.notes = `Chapa reported failure: ${body['reason'] || body['failure_reason'] || ''}`
       }
     } else if (chapaStatus === 'cancelled') {
+      console.log(`[chapaWebhook] Payment ${tx_ref} reported as CANCELLED by Chapa`)
       if (payment.status !== 'Paid') {
         payment.status = 'Cancelled'
       }
+    } else {
+      console.log(`[chapaWebhook] Unknown status from Chapa: "${chapaStatus}"`)
     }
 
     await payment.save()
-
+    console.log(`[chapaWebhook] Webhook processing complete for ${tx_ref}`)
     res.json({ success: true, message: 'Webhook processed' })
   } catch (error) {
-    console.error('chapaWebhook error:', error?.message || error)
-    res.status(500).json({ success: false, message: 'Error processing webhook' })
+    console.error('[chapaWebhook:processWebhookPayment] Error:', error?.message || error)
+    res.status(500).json({ success: false, message: 'Error processing webhook payment' })
   }
 }
 

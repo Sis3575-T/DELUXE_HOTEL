@@ -273,7 +273,7 @@ const MyReservations = () => {
                       </div>
 
                       <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t" style={{ borderColor: '#E5E7EB' }}>
-                        {res.paymentMethod === 'Chapa' && res.paymentStatus !== 'Paid' && res.status !== 'Cancelled' && (
+                        {false && res.paymentMethod === 'Chapa' && res.paymentStatus !== 'Paid' && res.status !== 'Cancelled' && (
                           <button
                             onClick={async (e) => {
                               e.stopPropagation()

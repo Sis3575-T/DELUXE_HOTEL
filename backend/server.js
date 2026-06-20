@@ -23,12 +23,13 @@ import backupRouter from './routes/backupRoute.js'
 import dashboardRouter from './routes/dashboardRoute.js'
 import aboutRouter from './routes/aboutRoute.js'
 import paymentRouter from './routes/paymentRoute.js'
+import syncRouter from './routes/syncRoute.js'
 import paymentConfig from './config/payment.js'
 
 const app = express()
 const port = process.env.PORT || 4000
 
-const REQUIRED_ENV_VARS = ['MONGODB_URI', 'CLOUDINARY_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_SECRET_KEY', 'JWT_SECRET']
+const REQUIRED_ENV_VARS = ['MONGODB_URI', 'CLOUDINARY_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_SECRET_KEY', 'JWT_SECRET', 'CHAPA_SECRET_KEY', 'CHAPA_PUBLIC_KEY']
 const missing = REQUIRED_ENV_VARS.filter(k => !process.env[k])
 if (missing.length > 0) {
   console.error('FATAL: Missing required environment variables:', missing.join(', '))
@@ -154,6 +155,7 @@ app.use('/api/backup', backupRouter)
 app.use('/api/dashboard', dashboardRouter)
 app.use('/api/about', aboutRouter)
 app.use('/api/payment', paymentRouter)
+app.use('/api/sync', syncRouter)
 
 app.get('/', (req, res) => {
   res.send("API working")
@@ -171,6 +173,13 @@ app.get('/api/health', (req, res) => {
       connected: dbConnected,
     },
     cloudinary: !!process.env.CLOUDINARY_NAME,
+    chapa: {
+      configured: !!process.env.CHAPA_SECRET_KEY,
+      mode: process.env.CHAPA_SECRET_KEY?.startsWith('CHASECK_LIVE') ? 'LIVE' : 'TEST',
+      api_url: process.env.CHAPA_API_URL || 'https://api.chapa.co/v1',
+      callback_url: (process.env.CHAPA_CALLBACK_URL || (process.env.BACKEND_URL ? `${process.env.BACKEND_URL}/api/payment/chapa-webhook` : 'not set')),
+      return_url: (process.env.CHAPA_RETURN_URL || (process.env.BACKEND_URL ? `${process.env.BACKEND_URL}/api/payment/chapa-return` : 'not set')),
+    },
     config: {
       frontend_url: process.env.FRONTEND_URL || 'not set',
       admin_url: process.env.ADMIN_URL || 'not set',
@@ -186,8 +195,4 @@ app.use((err, req, res, next) => {
 
 app.listen(port, () => {
   console.log('Server started on port: ' + port)
-  paymentConfig.logConfig('[startup]')
-  const pce = paymentConfig.validate()
-  if (pce.length > 0) console.warn('[startup] Payment config warnings:', pce)
-  else console.log('[startup] Payment configuration valid')
 })

@@ -169,9 +169,33 @@ async function verifyTransaction(tx_ref) {
 }
 
 function verifyWebhookSignature(rawBody, signature) {
-  if (!CHAPA_WEBHOOK_SECRET || !signature) return false
-  const hash = crypto.createHmac('sha256', CHAPA_WEBHOOK_SECRET).update(rawBody).digest('hex')
-  return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(signature))
+  if (!signature) {
+    console.warn('[chapa:verifyWebhook] No signature header provided')
+    return false
+  }
+
+  const secret = CHAPA_WEBHOOK_SECRET || paymentConfig.chapaSecretKey
+  if (!secret) {
+    console.error('[chapa:verifyWebhook] No webhook secret or CHAPA_SECRET_KEY configured')
+    return false
+  }
+
+  const hash = crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex')
+
+  try {
+    const hashBuf = Buffer.from(hash, 'utf8')
+    const sigBuf = Buffer.from(signature, 'utf8')
+    if (hashBuf.length !== sigBuf.length) {
+      console.warn(`[chapa:verifyWebhook] Signature length mismatch: computed=${hashBuf.length}, received=${sigBuf.length}`)
+      console.warn(`[chapa:verifyWebhook] Computed hash: ${hash}`)
+      console.warn(`[chapa:verifyWebhook] Received sig: ${signature}`)
+      return hash === signature
+    }
+    return crypto.timingSafeEqual(hashBuf, sigBuf)
+  } catch (err) {
+    console.error('[chapa:verifyWebhook] Signature comparison error:', err.message)
+    return hash === signature
+  }
 }
 
 async function generateTxRef(prefix = 'BOOK') {
@@ -180,10 +204,94 @@ async function generateTxRef(prefix = 'BOOK') {
   return `${prefix}-${timestamp}-${random}`
 }
 
+async function directCharge({ type, amount, currency, email, first_name, last_name, tx_ref, mobile, callback_url, return_url }) {
+  const configErrors = paymentConfig.validate()
+  if (configErrors.length > 0) {
+    console.error('[chapa:directCharge] Configuration errors:', configErrors)
+    const err = new Error('Payment gateway configuration error')
+    err.status = 500
+    err.configErrors = configErrors
+    throw err
+  }
+
+  const body = {
+    amount: String(amount),
+    currency: currency || 'ETB',
+    email: email || '',
+    first_name: first_name || '',
+    last_name: last_name || '',
+    tx_ref,
+    mobile,
+    callback_url: callback_url || paymentConfig.chapaCallbackUrl,
+    return_url: return_url || paymentConfig.chapaReturnUrl,
+  }
+
+  const fieldErrors = []
+  if (!body.amount || Number(body.amount) <= 0) fieldErrors.push('amount must be > 0')
+  if (!body.tx_ref) fieldErrors.push('tx_ref is required')
+  if (!body.mobile) fieldErrors.push('mobile number is required')
+  if (!body.callback_url) fieldErrors.push('callback_url is required')
+  if (!body.return_url) fieldErrors.push('return_url is required')
+  try { new URL(body.callback_url) } catch { fieldErrors.push(`callback_url invalid: ${body.callback_url}`) }
+  try { new URL(body.return_url) } catch { fieldErrors.push(`return_url invalid: ${body.return_url}`) }
+
+  if (fieldErrors.length > 0) {
+    console.error('[chapa:directCharge] Field validation errors:', fieldErrors)
+    const err = new Error(fieldErrors.join('; '))
+    err.status = 400
+    err.validationErrors = fieldErrors
+    throw err
+  }
+
+  return chapaRequest(`/charges?type=${type}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+async function authorizeDirectCharge({ reference, client, type }) {
+  const configErrors = paymentConfig.validate()
+  if (configErrors.length > 0) {
+    console.error('[chapa:authorizeDirectCharge] Configuration errors:', configErrors)
+    const err = new Error('Payment gateway configuration error')
+    err.status = 500
+    err.configErrors = configErrors
+    throw err
+  }
+
+  const body = { reference, client }
+  return chapaRequest(`/validate?type=${type}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+const MOBILE_MONEY_CHANNELS = ['Telebirr', 'CBE Birr', 'M-Pesa', 'Amole', 'Awash Birr', 'Ebirr']
+
+function isMobileMoneyChannel(channel) {
+  return MOBILE_MONEY_CHANNELS.some(c => c.toLowerCase() === (channel || '').toLowerCase())
+}
+
+function getDirectChargeType(channel) {
+  const map = {
+    'telebirr': 'telebirr',
+    'cbe birr': 'cbebirr',
+    'm-pesa': 'mpesa',
+    'amole': 'amole',
+    'awash birr': 'awashbirr',
+    'ebirr': 'ebirr',
+  }
+  return map[(channel || '').toLowerCase()] || ''
+}
+
 export {
   initializeTransaction,
   verifyTransaction,
   verifyWebhookSignature,
   generateTxRef,
   chapaRequest,
+  directCharge,
+  authorizeDirectCharge,
+  isMobileMoneyChannel,
+  getDirectChargeType,
 }

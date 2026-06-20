@@ -18,6 +18,16 @@ services:
         value: https://abay-grand-hotel-admin.vercel.app
       - key: JWT_SECRET
         value: demo
+      - key: CHAPA_SECRET_KEY
+        value: CHASECK_TEST-rEaRFW3Nzc7lQCXM3xwmYmqKLijltRUb
+      - key: CHAPA_PUBLIC_KEY
+        value: CHAPUBK_TEST-SvTl96p9pX9V46wF7CDalK4lQ3K9p1fS
+      - key: CHAPA_ENCRYPTION_KEY
+        value: iPf32TXeZEvwVb16fILsQHiA
+      - key: CHAPA_WEBHOOK_SECRET
+        value: CHASECK_TEST_6D0FA9C1A51AFB40AAB8D8C8C3601A6B
+      - key: CHAPA_API_URL
+        value: https://api.chapa.co/v1
       # IMPORTANT: Set MONGODB_URI in Render Dashboard → Environment
       # (do not put database credentials in render.yaml)
 
